@@ -16,23 +16,23 @@
   - [x] Initial commit to version control
 
 ### Step 2: Configure Dependencies
-- [ ] **Tasks:**
-  - [ ] Add and install all required dependencies to pubspec.yaml using `flutter pub add`, which gets the latest version.
-    - [ ] dart_openai (for OpenAI API integration)
-    - [ ] shared_preferences (for settings storage)
-    - [ ] flutter_secure_storage (for API key security)
-    - [ ] intl (for date formatting)
-    - [ ] path_provider (for file system access)
-    - [ ] url_launcher (for opening .ics files)
-    - [ ] ical (for iCalendar file generation)
-    - [ ] provider (for state management)
-- [ ] **Considerations:**
-  - [ ] Pin specific versions to ensure stability
-  - [ ] Review each package's license for compliance
-- [ ] **Definition of Done:**
-  - [ ] All dependencies successfully installed
-  - [ ] No package conflicts
-  - [ ] Example imports verify accessibility
+- [x] **Tasks:**
+  - [x] Add and install all required dependencies to pubspec.yaml using `flutter pub add`, which gets the latest version.
+    - [x] dart_openai (for OpenAI API integration)
+    - [x] shared_preferences (for settings storage)
+    - [x] flutter_secure_storage (for API key security)
+    - [x] intl (for date formatting)
+    - [x] path_provider (for file system access)
+    - [x] url_launcher (for opening .ics files)
+    - [x] ical (for iCalendar file generation)
+    - [x] provider (for state management)
+- [x] **Considerations:**
+  - [x] Pin specific versions to ensure stability
+  - [x] Review each package's license for compliance
+- [x] **Definition of Done:**
+  - [x] All dependencies successfully installed
+  - [x] No package conflicts
+  - [x] Example imports verify accessibility
 
 ### Step 3: Android Platform Configuration
 - [ ] **Tasks:**
