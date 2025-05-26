@@ -1,9 +1,12 @@
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 /// Service for handling Android platform-specific functionality
 /// including shared text intents and method channel communication
 class AndroidPlatformService {
-  static const MethodChannel _channel = MethodChannel('com.example.event_snap_2/share');
+  static const MethodChannel _channel = MethodChannel(
+    'com.example.event_snap_2/share',
+  );
 
   /// Gets shared text from Android intent if available
   /// Returns null if no shared text is available
@@ -12,7 +15,7 @@ class AndroidPlatformService {
       final String? sharedText = await _channel.invokeMethod('getSharedText');
       return sharedText;
     } on PlatformException catch (e) {
-      print('Error getting shared text: ${e.message}');
+      debugPrint('Error getting shared text: ${e.message}');
       return null;
     }
   }
@@ -23,7 +26,7 @@ class AndroidPlatformService {
     try {
       await _channel.invokeMethod('clearSharedText');
     } on PlatformException catch (e) {
-      print('Error clearing shared text: ${e.message}');
+      debugPrint('Error clearing shared text: ${e.message}');
     }
   }
 }
