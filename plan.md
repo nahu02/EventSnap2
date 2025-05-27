@@ -182,58 +182,38 @@
   - [x] Input validation for API key format
   - [x] Help text guides users on obtaining API keys
 
-### Step 12: Implement Loading Screen and Shared States
-- [ ] **Tasks:**
-  - [ ] Create LoadingScreen component
-  - [ ] Implement global loading state management
-  - [ ] Add animations for better user experience
-  - [ ] Create error display components
-- [ ] **Considerations:**
-  - [ ] Keep loading indicators consistent throughout app
-  - [ ] Provide meaningful error messages
-- [ ] **Definition of Done:**
-  - [ ] Loading screen displays during long operations
-  - [ ] Animations provide visual feedback
-  - [ ] Error messages are clear and actionable
-  - [ ] Loading states properly managed across screens
-
 ## Phase 4: Android Share Integration
 
-### Step 13: Implement Shared Text Handling
+### Step 12: Implement Shared Text Handling
 - [ ] **Tasks:**
   - [ ] Set up method channel in MainActivity.kt
-  - [ ] Implement Java/Kotlin code to extract shared text from intents
+  - [ ] Implement Kotlin code to extract shared text from intents
   - [ ] Create Flutter method channel handler
   - [ ] Connect shared text to event processing flow
 - [ ] **Considerations:**
-  - [ ] Handle different intent types and sources
+  - [ ] Handle different intent types and sources: homescreen launch intent needs to open Home screen, but share intent needs to open EventTextInput screen
   - [ ] Ensure app works when launched directly or via share
 - [ ] **Definition of Done:**
   - [ ] App receives shared text from other applications
   - [ ] Method channel successfully passes text to Flutter
   - [ ] App processes shared text automatically
   - [ ] Handles empty or invalid shared text gracefully
-  - [ ] Tested with multiple source apps (browser, notes, etc.)
 
-### Step 14: File Sharing and Calendar Integration
+### Step 13: Calendar Integration
 - [ ] **Tasks:**
-  - [ ] Implement file sharing for .ics files
-  - [ ] Create intent launching for calendar apps
+  - [ ] Use intent launching for calendar apps
   - [ ] Handle Android file provider configuration
   - [ ] Add support for different calendar applications
 - [ ] **Considerations:**
-  - [ ] Set up FileProvider for secure file sharing
   - [ ] Handle devices without calendar apps installed
 - [ ] **Definition of Done:**
-  - [ ] Generated .ics files can be shared with calendar apps
-  - [ ] FileProvider correctly configured in AndroidManifest.xml
-  - [ ] Calendar applications receive and can import events
+  - [ ] Generated .ics files can be opened with calendar apps via the 'Add to Calendar' button
   - [ ] Graceful handling when no compatible apps are found
   - [ ] Tested with multiple calendar applications
 
 ## Phase 5: Prompt Engineering and AI Integration
 
-### Step 15: Advanced Prompt Engineering
+### Step 14: Advanced Prompt Engineering
 - [ ] **Tasks:**
   - [ ] Refine system prompt for optimal event extraction
   - [ ] Create comprehensive example messages
@@ -249,7 +229,7 @@
   - [ ] Parameter tuning optimizes response quality
   - [ ] Tested with diverse input formats and styles
 
-### Step 16: Response Parsing and Validation
+### Step 15: Response Parsing and Validation
 - [ ] **Tasks:**
   - [ ] Implement robust JSON parsing from API responses
   - [ ] Add validation for extracted event properties
@@ -267,7 +247,7 @@
 
 ## Phase 6: Testing and Refinement
 
-### Step 17: Unit and Widget Testing
+### Step 16: Unit and Widget Testing
 - [ ] **Tasks:**
   - [ ] Implement unit tests for all services
   - [ ] Create widget tests for UI components
@@ -283,7 +263,7 @@
   - [ ] Test coverage meets predetermined targets
   - [ ] CI integration for automated testing
 
-### Step 18: Integration Testing
+### Step 17: Integration Testing
 - [ ] **Tasks:**
   - [ ] Create end-to-end tests for main user flows
   - [ ] Test Android share integration on real devices
@@ -299,7 +279,7 @@
   - [ ] App behavior consistent across environments
   - [ ] Performance metrics within acceptable ranges
 
-### Step 19: Performance Optimization
+### Step 18: Performance Optimization
 - [ ] **Tasks:**
   - [ ] Profile app for performance bottlenecks
   - [ ] Optimize state management to minimize rebuilds
@@ -315,7 +295,7 @@
   - [ ] Memory usage monitored and optimized
   - [ ] Frame rate consistently smooth during animations
 
-### Step 20: Final Polishing and Documentation
+### Step 19: Final Polishing and Documentation
 - [ ] **Tasks:**
   - [ ] Add app icons and splash screen
   - [ ] Create README and developer documentation
@@ -330,38 +310,5 @@
   - [ ] Code documented with comments and doc strings
   - [ ] UI consistent and polished across all screens
   - [ ] All known issues addressed or documented
-
-## Phase 7: Deployment and Release
-
-### Step 21: App Store Preparation
-- [ ] **Tasks:**
-  - [ ] Configure app signing
-  - [ ] Set up release build configuration
-  - [ ] Create app store listing materials (screenshots, descriptions)
-  - [ ] Prepare privacy policy
-- [ ] **Considerations:**
-  - [ ] Ensure compliance with Google Play policies
-  - [ ] Plan for API key distribution in production
-- [ ] **Definition of Done:**
-  - [ ] Release build generates properly signed APK/App Bundle
-  - [ ] All store listing materials prepared
-  - [ ] Privacy policy addresses data handling concerns
-  - [ ] App meets Google Play requirements
-
-### Step 22: Initial Release and Monitoring
-- [ ] **Tasks:**
-  - [ ] Deploy app to Google Play (internal testing track)
-  - [ ] Set up crash reporting and analytics
-  - [ ] Monitor initial user feedback
-  - [ ] Plan for iterative improvements
-- [ ] **Considerations:**
-  - [ ] Start with limited audience to identify issues
-  - [ ] Have rollback plan for critical issues
-- [ ] **Definition of Done:**
-  - [ ] App successfully deployed to testing track
-  - [ ] Monitoring systems in place and collecting data
-  - [ ] Initial feedback collected and categorized
-  - [ ] Plan established for addressing feedback
-  - [ ] No critical issues in production
 
 This implementation plan provides a structured approach to building the EventSnap application based on the design document. Each step includes specific tasks, important considerations, and clear definitions of done to guide the development process.
