@@ -167,20 +167,20 @@
   - [x] Field focus and keyboard behavior optimized for mobile
 
 ### Step 11: Implement Settings Screen
-- [ ] **Tasks:**
-  - [ ] Create SettingsScreen for API key configuration
-  - [ ] Add fields for OpenAI model selection
-  - [ ] Implement secure API key input
-  - [ ] Connect to Settings service
-- [ ] **Considerations:**
-  - [ ] Mask API key display for security
-  - [ ] Provide clear instructions for obtaining API keys
-- [ ] **Definition of Done:**
-  - [ ] Screen allows secure input of OpenAI API key
-  - [ ] Model selection implemented with sensible defaults
-  - [ ] Settings changes properly persisted
-  - [ ] Input validation for API key format
-  - [ ] Help text guides users on obtaining API keys
+- [x] **Tasks:**
+  - [x] Create SettingsScreen for API key configuration
+  - [x] Add fields for OpenAI model selection
+  - [x] Implement secure API key input
+  - [x] Connect to Settings service
+- [x] **Considerations:**
+  - [x] Mask API key display for security
+  - [x] Provide clear instructions for obtaining API keys
+- [x] **Definition of Done:**
+  - [x] Screen allows secure input of OpenAI API key
+  - [x] Model selection implemented with sensible defaults
+  - [x] Settings changes properly persisted
+  - [x] Input validation for API key format
+  - [x] Help text guides users on obtaining API keys
 
 ### Step 12: Implement Loading Screen and Shared States
 - [ ] **Tasks:**

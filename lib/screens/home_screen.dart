@@ -39,11 +39,6 @@ class HomeScreen extends StatelessWidget {
           return _buildMainContent(context, appState);
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => AppRouter.navigateToEventTextInput(context),
-        tooltip: 'Create Event from Text',
-        child: const Icon(Icons.add),
-      ),
     );
   }
 
@@ -115,12 +110,15 @@ class HomeScreen extends StatelessWidget {
             Text(
               'Welcome to EventSnap!',
               style: Theme.of(context).textTheme.headlineMedium,
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               'Convert any text into calendar events using AI. '
-              'Simply paste your text and let EventSnap extract the event details.',
+              'Simply paste your text and let EventSnap extract the event details.\n'
+              'You can also share any text from other apps with EventSnap, to automagically create events.',
               style: Theme.of(context).textTheme.bodyLarge,
+              textAlign: TextAlign.center,
             ),
           ],
         ),

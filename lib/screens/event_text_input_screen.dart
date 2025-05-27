@@ -22,6 +22,7 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
   final TextEditingController _textController = TextEditingController();
   final FocusNode _textFocusNode = FocusNode();
   bool _isProcessing = false;
+  bool _hasText = false;
   String? _errorMessage;
 
   @override
@@ -30,11 +31,26 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
     // Set initial text if provided (e.g., from sharing)
     if (widget.initialText != null) {
       _textController.text = widget.initialText!;
+      _hasText = widget.initialText!.trim().isNotEmpty;
+    }
+
+    // Listen to text changes to update button state
+    _textController.addListener(_onTextChanged);
+  }
+
+  /// Update button state when text changes
+  void _onTextChanged() {
+    final hasText = _textController.text.trim().isNotEmpty;
+    if (hasText != _hasText) {
+      setState(() {
+        _hasText = hasText;
+      });
     }
   }
 
   @override
   void dispose() {
+    _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _textFocusNode.dispose();
     super.dispose();
@@ -43,6 +59,8 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset:
+          false, // Prevent layout changes when keyboard appears
       appBar: AppBar(
         title: const Text('Create Event from Text'),
         leading: IconButton(
@@ -98,125 +116,139 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
 
   /// Build main content when app is configured
   Widget _buildMainContent(BuildContext context, AppStateProvider appState) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
+    return SafeArea(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Instructions
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
+          // Main scrollable content
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(
+                16.0,
+                16.0,
+                16.0,
+                80.0,
+              ), // Add bottom padding for footer
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.lightbulb_outline,
-                        color: Theme.of(context).colorScheme.primary,
+                  // Instructions
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.lightbulb_outline,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'How it works',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Paste or type any text that describes an event. For example:',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '• "Meeting with John tomorrow at 2 PM in the conference room"\n'
+                            '• "Dentist appointment next Friday at 10:30 AM"\n'
+                            '• "Birthday party on Saturday from 6 to 10 PM at Sarah\'s house"',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  fontStyle: FontStyle.italic,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'How it works',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Paste or type any text that describes an event. For example:',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '• "Meeting with John tomorrow at 2 PM in the conference room"\n'
-                    '• "Dentist appointment next Friday at 10:30 AM"\n'
-                    '• "Birthday party on Saturday from 6 to 10 PM at Sarah\'s house"',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontStyle: FontStyle.italic,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
+                  const SizedBox(height: 16),
+
+                  // Text input
+                  Text(
+                    'Event Description',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _textController,
+                    focusNode: _textFocusNode,
+                    maxLines: 6,
+                    enabled: !_isProcessing,
+                    decoration: InputDecoration(
+                      hintText: 'Describe your event in natural language...',
+                      border: const OutlineInputBorder(),
+                      filled: true,
+                      fillColor: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                      errorText: _errorMessage,
+                    ),
+                    onChanged: (value) {
+                      // Clear error when user starts typing
+                      if (_errorMessage != null) {
+                        setState(() {
+                          _errorMessage = null;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Submit button
+                  ElevatedButton.icon(
+                    onPressed: _isProcessing || !_hasText
+                        ? null
+                        : () => _processEventText(appState),
+                    icon: _isProcessing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.auto_awesome),
+                    label: Text(
+                      _isProcessing ? 'Processing...' : 'Create Event',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.all(16),
+                    ),
+                  ),
+
+                  // Add some space at the bottom for better scrolling
+                  const SizedBox(height: 32),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 16),
 
-          // Text input
-          Text(
-            'Event Description',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _textController,
-            focusNode: _textFocusNode,
-            maxLines: 6,
-            enabled: !_isProcessing,
-            decoration: InputDecoration(
-              hintText: 'Describe your event in natural language...',
-              border: const OutlineInputBorder(),
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-              errorText: _errorMessage,
-            ),
-            onChanged: (value) {
-              // Clear error when user starts typing
-              if (_errorMessage != null) {
-                setState(() {
-                  _errorMessage = null;
-                });
-              }
-            },
-          ),
-          const SizedBox(height: 24),
-
-          // Submit button
-          ElevatedButton.icon(
-            onPressed: _isProcessing || _textController.text.trim().isEmpty
-                ? null
-                : () => _processEventText(appState),
-            icon: _isProcessing
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.auto_awesome),
-            label: Text(_isProcessing ? 'Processing...' : 'Create Event'),
-            style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
-          ),
-
-          // Processing indicator
-          if (_isProcessing) ...[
-            const SizedBox(height: 16),
-            Card(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    SizedBox(width: 12),
-                    Text('AI is analyzing your text...'),
-                  ],
+          // Footer pinned to bottom
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.all(16.0),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                border: Border(
+                  top: BorderSide(
+                    color: Theme.of(context).dividerColor,
+                    width: 0.5,
+                  ),
                 ),
               ),
-            ),
-          ],
-
-          const Spacer(),
-
-          // Footer info
-          if (!_isProcessing)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16.0),
               child: Text(
                 'Your text will be processed securely using OpenAI\'s API.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -225,6 +257,7 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
                 textAlign: TextAlign.center,
               ),
             ),
+          ),
         ],
       ),
     );

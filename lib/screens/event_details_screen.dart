@@ -22,27 +22,27 @@ class EventDetailsScreen extends StatefulWidget {
 
 class _EventDetailsScreenState extends State<EventDetailsScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  
+
   // Form controllers
   late final TextEditingController _titleController;
   late final TextEditingController _descriptionController;
   late final TextEditingController _locationController;
-  
+
   // Date and time values
   late DateTime _startDateTime;
   late DateTime _endDateTime;
-  
+
   // State variables
   bool _isLoading = false;
   String? _errorMessage;
   List<String> _validationErrors = [];
-  
+
   @override
   void initState() {
     super.initState();
     _initializeFromEvent();
   }
-  
+
   @override
   void dispose() {
     _titleController.dispose();
@@ -50,15 +50,17 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
     _locationController.dispose();
     super.dispose();
   }
-  
+
   /// Initialize form fields from the event data
   void _initializeFromEvent() {
     final appState = context.read<AppStateProvider>();
     final EventModel? event = widget.initialEvent ?? appState.currentEvent;
-    
+
     if (event != null) {
       _titleController = TextEditingController(text: event.title);
-      _descriptionController = TextEditingController(text: event.description ?? '');
+      _descriptionController = TextEditingController(
+        text: event.description ?? '',
+      );
       _locationController = TextEditingController(text: event.location ?? '');
       _startDateTime = event.startDateTime;
       _endDateTime = event.endDateTime;
@@ -82,13 +84,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => AppRouter.goBack(context),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.check),
-            onPressed: _isLoading ? null : _validateAndSave,
-            tooltip: 'Save Event',
-          ),
-        ],
       ),
       body: _buildBody(),
       bottomNavigationBar: _buildBottomBar(),
@@ -106,28 +101,28 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
           children: [
             // Error display
             if (_errorMessage != null) _buildErrorCard(),
-            
+
             // Validation errors
             if (_validationErrors.isNotEmpty) _buildValidationErrorsCard(),
-            
+
             // Title field
             _buildTitleField(),
             const SizedBox(height: 16),
-            
+
             // Description field
             _buildDescriptionField(),
             const SizedBox(height: 16),
-            
+
             // Location field
             _buildLocationField(),
             const SizedBox(height: 24),
-            
+
             // Date and time section
             _buildDateTimeSection(),
             const SizedBox(height: 24),
-            
+
             // Event summary
-            _buildEventSummary(),
+            // _buildEventSummary(),
           ],
         ),
       ),
@@ -191,15 +186,17 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            ..._validationErrors.map((error) => Padding(
-              padding: const EdgeInsets.only(left: 24.0, bottom: 4.0),
-              child: Text(
-                '• $error',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onErrorContainer,
+            ..._validationErrors.map(
+              (error) => Padding(
+                padding: const EdgeInsets.only(left: 24.0, bottom: 4.0),
+                child: Text(
+                  '• $error',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                  ),
                 ),
               ),
-            )),
+            ),
           ],
         ),
       ),
@@ -267,12 +264,9 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Date & Time',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('Date & Time', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
-            
+
             // Start date and time
             _buildDateTimeField(
               label: 'Start',
@@ -289,7 +283,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
               },
             ),
             const SizedBox(height: 16),
-            
+
             // End date and time
             _buildDateTimeField(
               label: 'End',
@@ -301,9 +295,9 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                 _clearErrors();
               },
             ),
-            
+
             const SizedBox(height: 12),
-            
+
             // Duration display
             _buildDurationDisplay(),
           ],
@@ -322,10 +316,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
       children: [
         SizedBox(
           width: 60,
-          child: Text(
-            '$label:',
-            style: Theme.of(context).textTheme.labelLarge,
-          ),
+          child: Text('$label:', style: Theme.of(context).textTheme.labelLarge),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -334,7 +325,9 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               decoration: BoxDecoration(
-                border: Border.all(color: Theme.of(context).colorScheme.outline),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outline,
+                ),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -368,7 +361,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   Widget _buildDurationDisplay() {
     final duration = _endDateTime.difference(_startDateTime);
     final durationText = _formatDuration(duration);
-    
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -410,9 +403,9 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
             _buildSummaryRow(
               icon: Icons.title,
               label: 'Title',
-              value: _titleController.text.isNotEmpty 
-                ? _titleController.text 
-                : 'No title entered',
+              value: _titleController.text.isNotEmpty
+                  ? _titleController.text
+                  : 'No title entered',
             ),
             if (_descriptionController.text.isNotEmpty)
               _buildSummaryRow(
@@ -465,10 +458,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            child: Text(value, style: Theme.of(context).textTheme.bodySmall),
           ),
         ],
       ),
@@ -503,12 +493,12 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
               child: ElevatedButton.icon(
                 onPressed: _isLoading ? null : _addToCalendar,
                 icon: _isLoading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.calendar_today),
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.calendar_today),
                 label: Text(_isLoading ? 'Adding...' : 'Add to Calendar'),
               ),
             ),
@@ -530,18 +520,18 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
       lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
     );
-    
+
     if (pickedDate == null) return;
-    
+
     // Pick time
     if (!mounted) return;
     final pickedTime = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(currentDateTime),
     );
-    
+
     if (pickedTime == null) return;
-    
+
     // Combine date and time
     final newDateTime = DateTime(
       pickedDate.year,
@@ -550,7 +540,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
       pickedTime.hour,
       pickedTime.minute,
     );
-    
+
     onChanged(newDateTime);
   }
 
@@ -571,86 +561,47 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
     }
   }
 
-  /// Validate and save the event
-  void _validateAndSave() {
-    _clearErrors();
-    
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-    
-    // Create event model for validation
-    try {
-      final event = _createEventModel();
-      final validationErrors = event.validate();
-      
-      if (validationErrors.isNotEmpty) {
-        setState(() {
-          _validationErrors = validationErrors;
-        });
-        return;
-      }
-      
-      // Update app state with the validated event
-      final appState = context.read<AppStateProvider>();
-      appState.setCurrentEvent(event);
-      
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Event saved successfully'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Error creating event: $e';
-      });
-    }
-  }
-
   /// Add event to calendar
   Future<void> _addToCalendar() async {
     _clearErrors();
-    
+
     if (!_formKey.currentState!.validate()) {
       return;
     }
-    
+
     setState(() {
       _isLoading = true;
     });
-    
+
     try {
       // Create and validate event
       final event = _createEventModel();
       final validationErrors = event.validate();
-      
+
       if (validationErrors.isNotEmpty) {
         setState(() {
           _validationErrors = validationErrors;
         });
         return;
       }
-      
+
       // Convert to CalendarEventProperties
       final properties = CalendarEventProperties.fromEventModel(event);
-      
+
       // Capture the app state provider before async operations
       final appState = context.read<AppStateProvider>();
-      
+
       // Create iCalendar file
       final iCalendarCreator = ICalendarCreator();
       final filePath = await iCalendarCreator.createIcalFile(properties);
-      
+
       // Share the file
       final success = await iCalendarCreator.shareIcalFile(filePath);
-      
+
       if (success) {
         // Update app state
         appState.setCurrentEvent(event);
-        
+
         // Show success message and navigate back
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -659,7 +610,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
               behavior: SnackBarBehavior.floating,
             ),
           );
-          
+
           // Navigate back to home
           AppRouter.navigateToHome(context);
         }
@@ -668,7 +619,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
           _errorMessage = 'Failed to share event. Please try again.';
         });
       }
-      
     } catch (e) {
       setState(() {
         _errorMessage = _getErrorMessage(e);
@@ -686,12 +636,12 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   EventModel _createEventModel() {
     return EventModel(
       title: _titleController.text.trim(),
-      description: _descriptionController.text.trim().isEmpty 
-        ? null 
-        : _descriptionController.text.trim(),
-      location: _locationController.text.trim().isEmpty 
-        ? null 
-        : _locationController.text.trim(),
+      description: _descriptionController.text.trim().isEmpty
+          ? null
+          : _descriptionController.text.trim(),
+      location: _locationController.text.trim().isEmpty
+          ? null
+          : _locationController.text.trim(),
       startDateTime: _startDateTime,
       endDateTime: _endDateTime,
     );
@@ -710,10 +660,13 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   /// Get user-friendly error message
   String _getErrorMessage(Object error) {
     final errorString = error.toString();
-    
-    if (errorString.contains('file system') || errorString.contains('directory')) {
+    debugPrint('Error occurred on Event Details Screen: $errorString');
+
+    if (errorString.contains('file system') ||
+        errorString.contains('directory')) {
       return 'Unable to create calendar file. Please check storage permissions.';
-    } else if (errorString.contains('network') || errorString.contains('connection')) {
+    } else if (errorString.contains('network') ||
+        errorString.contains('connection')) {
       return 'Network error. Please check your connection and try again.';
     } else if (errorString.contains('permission')) {
       return 'Permission denied. Please check app permissions.';
