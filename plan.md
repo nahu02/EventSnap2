@@ -151,20 +151,20 @@
   - [x] UI tested on different screen sizes
 
 ### Step 10: Implement Event Details Screen
-- [ ] **Tasks:**
-  - [ ] Create EventDetailsScreen with form fields for all event properties
-  - [ ] Implement validation for required fields
-  - [ ] Add "Add to Calendar" button functionality
-  - [ ] Connect to iCalendar service
-- [ ] **Considerations:**
-  - [ ] Intuitive date/time input for users
-  - [ ] Form validation with clear error messages
-- [ ] **Definition of Done:**
-  - [ ] Screen displays and allows editing of all event properties
-  - [ ] Form validation ensures valid event data
-  - [ ] "Add to Calendar" button generates and shares .ics file
-  - [ ] UI responds appropriately on different screen sizes
-  - [ ] Field focus and keyboard behavior optimized for mobile
+- [x] **Tasks:**
+  - [x] Create EventDetailsScreen with form fields for all event properties
+  - [x] Implement validation for required fields
+  - [x] Add "Add to Calendar" button functionality
+  - [x] Connect to iCalendar service
+- [x] **Considerations:**
+  - [x] Intuitive date/time input for users
+  - [x] Form validation with clear error messages
+- [x] **Definition of Done:**
+  - [x] Screen displays and allows editing of all event properties
+  - [x] Form validation ensures valid event data
+  - [x] "Add to Calendar" button generates and shares .ics file
+  - [x] UI responds appropriately on different screen sizes
+  - [x] Field focus and keyboard behavior optimized for mobile
 
 ### Step 11: Implement Settings Screen
 - [ ] **Tasks:**

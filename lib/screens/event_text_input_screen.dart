@@ -186,9 +186,7 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
                   )
                 : const Icon(Icons.auto_awesome),
             label: Text(_isProcessing ? 'Processing...' : 'Create Event'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.all(16),
-            ),
+            style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
           ),
 
           // Processing indicator
@@ -252,8 +250,8 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
       final aiService = OpenAiCalendarEventInterpreter(appState.settings!);
 
       // Process the text
-      final CalendarEventProperties properties =
-          await aiService.eventToCalendarPropertiesAsync(text);
+      final CalendarEventProperties properties = await aiService
+          .eventToCalendarPropertiesAsync(text);
 
       // Convert to EventModel
       final event = properties.toEventModel();
