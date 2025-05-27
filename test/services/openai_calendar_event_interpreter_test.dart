@@ -14,7 +14,7 @@ void main() {
       await dotenv.load(fileName: '.env');
     } catch (e) {
       // .env file might not exist in CI/CD, that's ok
-      print('Warning: Could not load .env file: $e');
+      // Silently handle missing .env file in test environment
     }
   });
 

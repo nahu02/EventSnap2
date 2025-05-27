@@ -9,7 +9,7 @@ class MockSettingsService implements SettingsService {
   // In-memory storage maps
   final Map<String, String> _secureStorage = {};
   final Map<String, String> _sharedPrefs = {};
-  
+
   // Cache for improved performance
   Settings? _cachedSettings;
   bool _cacheValid = false;
@@ -37,11 +37,11 @@ class MockSettingsService implements SettingsService {
     try {
       // Load settings from storage
       final settings = await _loadSettingsFromStorage();
-      
+
       // Cache the loaded settings
       _cachedSettings = settings;
       _cacheValid = true;
-      
+
       return settings;
     } catch (e) {
       // If loading fails, return default settings
@@ -90,10 +90,10 @@ class MockSettingsService implements SettingsService {
     try {
       // Clear secure storage
       _secureStorage.clear();
-      
+
       // Clear shared preferences
       _sharedPrefs.clear();
-      
+
       // Invalidate cache
       _invalidateCache();
     } catch (e) {
@@ -108,7 +108,7 @@ class MockSettingsService implements SettingsService {
       if (key == _apiKeyKey) {
         return _secureStorage[key];
       }
-      
+
       // Check shared preferences
       return _sharedPrefs[key];
     } catch (e) {
@@ -125,7 +125,7 @@ class MockSettingsService implements SettingsService {
       } else {
         _sharedPrefs[key] = value;
       }
-      
+
       // Invalidate cache since individual setting was updated
       _invalidateCache();
     } catch (e) {
@@ -150,9 +150,14 @@ class MockSettingsService implements SettingsService {
 
     // Load from shared preferences
     final model = _sharedPrefs[_modelKey] ?? Settings.defaults().openAiModel;
-    final maxRetries = int.tryParse(_sharedPrefs[_maxRetriesKey] ?? '') ?? Settings.defaults().maxRetries;
-    final timeoutSeconds = int.tryParse(_sharedPrefs[_timeoutSecondsKey] ?? '') ?? Settings.defaults().timeoutSeconds;
-    final debugMode = (_sharedPrefs[_debugModeKey] ?? 'false').toLowerCase() == 'true';
+    final maxRetries =
+        int.tryParse(_sharedPrefs[_maxRetriesKey] ?? '') ??
+        Settings.defaults().maxRetries;
+    final timeoutSeconds =
+        int.tryParse(_sharedPrefs[_timeoutSecondsKey] ?? '') ??
+        Settings.defaults().timeoutSeconds;
+    final debugMode =
+        (_sharedPrefs[_debugModeKey] ?? 'false').toLowerCase() == 'true';
 
     return Settings(
       openAiApiKey: apiKey,
@@ -191,7 +196,7 @@ void main() {
 
     setUp(() {
       settingsService = MockSettingsService();
-      
+
       // Clear any existing settings before each test
       SharedPreferences.setMockInitialValues({});
     });
@@ -233,7 +238,10 @@ void main() {
         final retrievedSettings = await settingsService.getSettings();
 
         // Assert
-        expect(retrievedSettings.openAiApiKey, equals(testSettings.openAiApiKey));
+        expect(
+          retrievedSettings.openAiApiKey,
+          equals(testSettings.openAiApiKey),
+        );
         expect(retrievedSettings.openAiModel, equals(testSettings.openAiModel));
         expect(retrievedSettings.maxRetries, equals(testSettings.maxRetries));
         expect(
@@ -387,13 +395,13 @@ void main() {
         );
 
         await settingsService.updateSettings(initialSettings);
-        
+
         // Get settings to populate cache
         await settingsService.getSettings();
 
         // Act - Update individual setting
         await settingsService.setSetting('openai_model', 'gpt-4');
-        
+
         // Get settings again - should reload from storage
         final updatedSettings = await settingsService.getSettings();
 
@@ -436,7 +444,7 @@ void main() {
 
         // Assert
         expect(await settingsService.hasSettings(), isFalse);
-        
+
         final settings = await settingsService.getSettings();
         expect(settings.openAiApiKey, isEmpty);
         expect(settings.openAiModel, equals('gpt-4.1')); // Default value
@@ -447,7 +455,7 @@ void main() {
         // we can't easily simulate storage failures. In a real app, this
         // would test scenarios like insufficient storage space, permission
         // errors, etc.
-        
+
         // For now, we test that the service doesn't crash on normal operations
         expect(() => settingsService.getSettings(), returnsNormally);
         expect(() => settingsService.clearSettings(), returnsNormally);
@@ -547,7 +555,10 @@ void main() {
         final finalSettings = await settingsService.getSettings();
 
         // Assert
-        expect(finalSettings.openAiApiKey, equals('sk-original123')); // Unchanged
+        expect(
+          finalSettings.openAiApiKey,
+          equals('sk-original123'),
+        ); // Unchanged
         expect(finalSettings.openAiModel, equals('gpt-4')); // Changed
         expect(finalSettings.maxRetries, equals(3)); // Unchanged
         expect(finalSettings.timeoutSeconds, equals(30)); // Unchanged

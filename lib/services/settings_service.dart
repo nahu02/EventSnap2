@@ -1,10 +1,9 @@
-import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/settings.dart';
 
 /// Abstract interface for settings management
-/// 
+///
 /// Defines the contract for storing and retrieving application settings
 /// with secure handling for sensitive data like API keys.
 abstract class SettingsService {
@@ -28,18 +27,14 @@ abstract class SettingsService {
 }
 
 /// Implementation of SettingsService using flutter_secure_storage and shared_preferences
-/// 
+///
 /// Sensitive data (API keys) are stored using flutter_secure_storage for encryption.
 /// Non-sensitive data uses shared_preferences for better performance.
 class SecureSettingsService implements SettingsService {
   // Storage instances
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage(
-    aOptions: AndroidOptions(
-      encryptedSharedPreferences: true,
-    ),
-    iOptions: IOSOptions(
-      groupId: 'group.com.eventsnap.app',
-    ),
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(groupId: 'group.com.eventsnap.app'),
   );
 
   // Keys for secure storage (sensitive data)
@@ -60,7 +55,7 @@ class SecureSettingsService implements SettingsService {
   bool _cacheValid = false;
 
   /// Gets the current settings from storage
-  /// 
+  ///
   /// Returns cached settings if available and valid, otherwise loads from storage.
   /// If no settings exist, returns default settings.
   @override
@@ -76,11 +71,11 @@ class SecureSettingsService implements SettingsService {
 
       // Load settings from storage
       final settings = await _loadSettingsFromStorage();
-      
+
       // Cache the loaded settings
       _cachedSettings = settings;
       _cacheValid = true;
-      
+
       return settings;
     } catch (e) {
       // If loading fails, return default settings
@@ -92,7 +87,7 @@ class SecureSettingsService implements SettingsService {
   }
 
   /// Updates settings with the provided values
-  /// 
+  ///
   /// Validates settings before storing and updates both secure and shared storage.
   /// Invalidates cache after successful update.
   @override
@@ -126,7 +121,7 @@ class SecureSettingsService implements SettingsService {
   }
 
   /// Clears all stored settings
-  /// 
+  ///
   /// Removes all data from both secure storage and shared preferences.
   /// Invalidates cache after clearing.
   @override
@@ -152,7 +147,7 @@ class SecureSettingsService implements SettingsService {
   }
 
   /// Gets a specific setting value by key
-  /// 
+  ///
   /// Returns null if the setting doesn't exist.
   /// Note: This method bypasses the cache for real-time values.
   @override
@@ -171,7 +166,7 @@ class SecureSettingsService implements SettingsService {
   }
 
   /// Updates a specific setting value
-  /// 
+  ///
   /// Invalidates cache after update to ensure consistency.
   @override
   Future<void> setSetting(String key, String value) async {
@@ -185,7 +180,7 @@ class SecureSettingsService implements SettingsService {
           await prefs.setString(key, value);
           break;
       }
-      
+
       // Invalidate cache since individual setting was updated
       _cacheValid = false;
     } catch (e) {
@@ -194,7 +189,7 @@ class SecureSettingsService implements SettingsService {
   }
 
   /// Returns true if settings have been initialized
-  /// 
+  ///
   /// Checks if at least the settings version exists in storage.
   @override
   Future<bool> hasSettings() async {
@@ -207,7 +202,7 @@ class SecureSettingsService implements SettingsService {
   }
 
   /// Loads settings from storage
-  /// 
+  ///
   /// Combines data from secure storage and shared preferences to create
   /// a complete Settings object.
   Future<Settings> _loadSettingsFromStorage() async {
@@ -232,7 +227,7 @@ class SecureSettingsService implements SettingsService {
   }
 
   /// Performs settings migration if needed
-  /// 
+  ///
   /// Checks the current settings version and performs any necessary
   /// data migrations for backwards compatibility.
   Future<void> _performMigrationIfNeeded() async {
@@ -251,13 +246,13 @@ class SecureSettingsService implements SettingsService {
   }
 
   /// Migrates settings from one version to another
-  /// 
+  ///
   /// Currently handles migration from version 0 (no version) to version 1.
   /// Future versions can add additional migration logic here.
   Future<void> _migrateSettings(int fromVersion, int toVersion) async {
     // Currently no migrations needed, but this is where future
     // migration logic would go
-    
+
     // Example migration logic:
     // if (fromVersion == 0 && toVersion >= 1) {
     //   // Migrate from legacy storage format
@@ -266,7 +261,7 @@ class SecureSettingsService implements SettingsService {
   }
 
   /// Invalidates the settings cache
-  /// 
+  ///
   /// Forces the next call to getSettings() to reload from storage.
   /// Useful for testing or when external changes are made to storage.
   void invalidateCache() {
@@ -275,7 +270,7 @@ class SecureSettingsService implements SettingsService {
   }
 
   /// Gets cached settings without accessing storage
-  /// 
+  ///
   /// Returns null if cache is invalid or empty.
   /// Useful for performance-critical scenarios where you want to avoid async calls.
   Settings? getCachedSettings() {
