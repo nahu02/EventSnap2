@@ -135,20 +135,20 @@
   - [x] Theme support working
 
 ### Step 9: Implement Event Text Input Screen
-- [ ] **Tasks:**
-  - [ ] Create EventTextScreen with text input field
-  - [ ] Add submission button with loading state
-  - [ ] Implement connection to AI service
-  - [ ] Handle errors during text processing
-- [ ] **Considerations:**
-  - [ ] Provide clear input instructions to users
-  - [ ] Show appropriate loading indicators during API calls
-- [ ] **Definition of Done:**
-  - [ ] Screen allows text input with clear UI
-  - [ ] Submit button triggers AI processing
-  - [ ] Loading state properly displayed during processing
-  - [ ] Error states handled with user-friendly messages
-  - [ ] UI tested on different screen sizes
+- [x] **Tasks:**
+  - [x] Create EventTextScreen with text input field
+  - [x] Add submission button with loading state
+  - [x] Implement connection to AI service
+  - [x] Handle errors during text processing
+- [x] **Considerations:**
+  - [x] Provide clear input instructions to users
+  - [x] Show appropriate loading indicators during API calls
+- [x] **Definition of Done:**
+  - [x] Screen allows text input with clear UI
+  - [x] Submit button triggers AI processing
+  - [x] Loading state properly displayed during processing
+  - [x] Error states handled with user-friendly messages
+  - [x] UI tested on different screen sizes
 
 ### Step 10: Implement Event Details Screen
 - [ ] **Tasks:**
