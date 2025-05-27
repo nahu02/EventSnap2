@@ -39,21 +39,21 @@ class Settings {
       if (openAiApiKey.trim().isEmpty) {
         throw ArgumentError('OpenAI API key cannot be empty');
       }
-    }
 
-    // Validate model name is not empty
-    if (openAiModel.trim().isEmpty) {
-      throw ArgumentError('OpenAI model cannot be empty');
-    }
+      // Validate model name is not empty
+      if (openAiModel.trim().isEmpty) {
+        throw ArgumentError('OpenAI model cannot be empty');
+      }
 
-    // Validate reasonable retry count
-    if (maxRetries < 0 || maxRetries > 10) {
-      throw ArgumentError('Max retries must be between 0 and 10');
-    }
+      // Validate reasonable retry count
+      if (maxRetries < 0 || maxRetries > 10) {
+        throw ArgumentError('Max retries must be between 0 and 10');
+      }
 
-    // Validate reasonable timeout
-    if (timeoutSeconds < 5 || timeoutSeconds > 300) {
-      throw ArgumentError('Timeout must be between 5 and 300 seconds');
+      // Validate reasonable timeout
+      if (timeoutSeconds < 5 || timeoutSeconds > 300) {
+        throw ArgumentError('Timeout must be between 5 and 300 seconds');
+      }
     }
   }
 
@@ -115,6 +115,7 @@ class Settings {
     int? maxRetries,
     int? timeoutSeconds,
     bool? debugMode,
+    bool validateOnCreation = true,
   }) {
     return Settings(
       openAiApiKey: openAiApiKey ?? this.openAiApiKey,
@@ -122,6 +123,7 @@ class Settings {
       maxRetries: maxRetries ?? this.maxRetries,
       timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
       debugMode: debugMode ?? this.debugMode,
+      validateOnCreation: validateOnCreation,
     );
   }
 
