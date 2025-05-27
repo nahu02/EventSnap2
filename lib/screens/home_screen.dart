@@ -1,14 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state_provider.dart';
+import '../services/shared_text_handler.dart';
 import '../navigation/app_router.dart';
 
 /// Home screen - main entry point of the application
 ///
 /// Displays welcome message, navigation options, and app status.
 /// Provides quick access to main features.
-class HomeScreen extends StatelessWidget {
+/// Handles shared text navigation when the app is launched via sharing.
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _hasCheckedSharedText = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_hasCheckedSharedText) {
+      _hasCheckedSharedText = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        SharedTextHandler.instance.checkAndHandleSharedTextNavigation(context);
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

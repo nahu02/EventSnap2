@@ -173,7 +173,7 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
 
                   // Text input
                   Text(
@@ -184,7 +184,7 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
                   TextField(
                     controller: _textController,
                     focusNode: _textFocusNode,
-                    maxLines: 6,
+                    maxLines: 10,
                     enabled: !_isProcessing,
                     decoration: InputDecoration(
                       hintText: 'Describe your event in natural language...',

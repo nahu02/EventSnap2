@@ -25,8 +25,9 @@ class AppRouter {
         );
 
       case eventTextInput:
+        final args = settings.arguments as String?;
         return MaterialPageRoute(
-          builder: (_) => const EventTextInputScreen(),
+          builder: (_) => EventTextInputScreen(initialText: args),
           settings: settings,
         );
 
@@ -59,9 +60,12 @@ class AppRouter {
     Navigator.pushNamedAndRemoveUntil(context, home, (route) => false);
   }
 
-  /// Navigate to event text input screen
-  static void navigateToEventTextInput(BuildContext context) {
-    Navigator.pushNamed(context, eventTextInput);
+  /// Navigate to event text input screen with optional initial text
+  static void navigateToEventTextInput(
+    BuildContext context, {
+    String? initialText,
+  }) {
+    Navigator.pushNamed(context, eventTextInput, arguments: initialText);
   }
 
   /// Navigate to event details screen with optional event data

@@ -5,3 +5,4 @@ export 'calendar_event_interpreter.dart';
 export 'icalendar_creator.dart';
 export 'openai_calendar_event_interpreter.dart';
 export 'settings_service.dart';
+export 'shared_text_handler.dart';

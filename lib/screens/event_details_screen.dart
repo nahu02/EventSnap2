@@ -36,11 +36,15 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   bool _isLoading = false;
   String? _errorMessage;
   List<String> _validationErrors = [];
+  bool _initialized = false;
 
   @override
-  void initState() {
-    super.initState();
-    _initializeFromEvent();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      _initializeFromEvent();
+      _initialized = true;
+    }
   }
 
   @override
@@ -388,83 +392,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   }
 
   /// Build event summary card
-  Widget _buildEventSummary() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Event Summary',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
-            _buildSummaryRow(
-              icon: Icons.title,
-              label: 'Title',
-              value: _titleController.text.isNotEmpty
-                  ? _titleController.text
-                  : 'No title entered',
-            ),
-            if (_descriptionController.text.isNotEmpty)
-              _buildSummaryRow(
-                icon: Icons.description,
-                label: 'Description',
-                value: _descriptionController.text,
-              ),
-            if (_locationController.text.isNotEmpty)
-              _buildSummaryRow(
-                icon: Icons.location_on,
-                label: 'Location',
-                value: _locationController.text,
-              ),
-            _buildSummaryRow(
-              icon: Icons.schedule,
-              label: 'Duration',
-              value: _formatDuration(_endDateTime.difference(_startDateTime)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Build summary row
-  Widget _buildSummaryRow({
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            icon,
-            size: 16,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 80,
-            child: Text(
-              '$label:',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w500,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(value, style: Theme.of(context).textTheme.bodySmall),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// Build bottom navigation bar with action buttons
   Widget _buildBottomBar() {
     return Container(
