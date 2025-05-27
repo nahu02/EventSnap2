@@ -70,20 +70,20 @@
 
 ### Step 5: Implement AI Communication Service
 - [ ] **Tasks:**
-  - [ ] Create CalendarEventInterpreter interface
-  - [ ] Implement OpenAiCalendarEventInterpreter using dart_openai SDK
-  - [ ] Develop prompt engineering with system messages and examples
-  - [ ] Implement error handling and retry logic
-- [ ] **Considerations:**
-  - [ ] Ensure dynamic date handling in prompts based on current date
-  - [ ] Handle API timeouts and rate limiting
-  - [ ] Properly secure API key usage
-- [ ] **Definition of Done:**
-  - [ ] Service successfully communicates with OpenAI API
-  - [ ] Structured JSON responses correctly parsed into EventModel
-  - [ ] Error handling covers network issues, invalid responses, etc.
-  - [ ] Prompt examples updated dynamically based on current date
-  - [ ] Unit tests with mock responses verify service behavior
+  - [x] Create CalendarEventInterpreter interface
+  - [x] Implement OpenAiCalendarEventInterpreter using dart_openai SDK
+  - [x] Develop prompt engineering with system messages and examples
+  - [x] Implement error handling and retry logic
+- [x] **Considerations:**
+  - [x] Ensure dynamic date handling in prompts based on current date
+  - [x] Handle API timeouts and rate limiting
+  - [x] Properly secure API key usage
+- [x] **Definition of Done:**
+  - [x] Service successfully communicates with OpenAI API
+  - [x] Structured JSON responses correctly parsed into EventModel
+  - [x] Error handling covers network issues, invalid responses, etc.
+  - [x] Prompt examples updated dynamically based on current date
+  - [x] Unit tests with mock responses verify service behavior
 
 ### Step 6: Implement iCalendar Service
 - [ ] **Tasks:**
