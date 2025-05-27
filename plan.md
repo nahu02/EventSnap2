@@ -86,20 +86,20 @@
   - [x] Unit tests with mock responses verify service behavior
 
 ### Step 6: Implement iCalendar Service
-- [ ] **Tasks:**
-  - [ ] Create CalendarCreator interface
-  - [ ] Implement ICalendarCreator using the ical package
-  - [ ] Develop file saving and sharing functionality
-  - [ ] Handle date/time formatting according to iCalendar standards
-- [ ] **Considerations:**
-  - [ ] Ensure proper timezone handling
-  - [ ] Generate unique UIDs for calendar events
-- [ ] **Definition of Done:**
-  - [ ] Service generates valid .ics files from event data
-  - [ ] Files saved properly to app's temporary directory
-  - [ ] Generated files validate against iCalendar standards
-  - [ ] Basic integration with platform file sharing is functional
-  - [ ] Unit tests verify .ics file generation
+- [x] **Tasks:**
+  - [x] Create CalendarCreator interface
+  - [x] Implement ICalendarCreator using the ical package
+  - [x] Develop file saving and sharing functionality
+  - [x] Handle date/time formatting according to iCalendar standards
+- [x] **Considerations:**
+  - [x] Ensure proper timezone handling
+  - [x] Generate unique UIDs for calendar events
+- [x] **Definition of Done:**
+  - [x] Service generates valid .ics files from event data
+  - [x] Files saved properly to app's temporary directory
+  - [x] Generated files validate against iCalendar standards
+  - [x] Basic integration with platform file sharing is functional
+  - [x] Unit tests verify .ics file generation
 
 ### Step 7: Implement Settings Management
 - [ ] **Tasks:**
