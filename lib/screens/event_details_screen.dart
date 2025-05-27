@@ -522,6 +522,16 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
       final iCalendarCreator = ICalendarCreator();
       final filePath = await iCalendarCreator.createIcalFile(properties);
 
+      // Check if calendar apps are available before attempting to share
+      final hasCalendarApps = await iCalendarCreator.hasCalendarApps();
+      if (!hasCalendarApps) {
+        setState(() {
+          _errorMessage =
+              'No calendar applications found on this device. Please install a calendar app to add events.';
+        });
+        return;
+      }
+
       // Share the file
       final success = await iCalendarCreator.shareIcalFile(filePath);
 
@@ -543,7 +553,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
         }
       } else {
         setState(() {
-          _errorMessage = 'Failed to share event. Please try again.';
+          _errorMessage =
+              'Unable to open calendar file. Please ensure you have a calendar app installed that can handle .ics files.';
         });
       }
     } catch (e) {

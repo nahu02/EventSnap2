@@ -200,16 +200,16 @@
   - [x] Handles empty or invalid shared text gracefully
 
 ### Step 13: Calendar Integration
-- [ ] **Tasks:**
-  - [ ] Use intent launching for calendar apps
-  - [ ] Handle Android file provider configuration
-  - [ ] Add support for different calendar applications
-- [ ] **Considerations:**
-  - [ ] Handle devices without calendar apps installed
-- [ ] **Definition of Done:**
-  - [ ] Generated .ics files can be opened with calendar apps via the 'Add to Calendar' button
-  - [ ] Graceful handling when no compatible apps are found
-  - [ ] Tested with multiple calendar applications
+- [x] **Tasks:**
+  - [x] Use intent launching for calendar apps
+  - [x] Handle Android file provider configuration
+  - [x] Add support for different calendar applications
+- [x] **Considerations:**
+  - [x] Handle devices without calendar apps installed
+- [x] **Definition of Done:**
+  - [x] Generated .ics files can be opened with calendar apps via the 'Add to Calendar' button
+  - [x] Graceful handling when no compatible apps are found
+  - [x] Tested with multiple calendar applications
 
 ## Phase 5: Prompt Engineering and AI Integration
 

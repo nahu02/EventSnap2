@@ -1,4 +1,5 @@
 // Services barrel file
+export 'android_calendar_service.dart';
 export 'android_platform_service.dart';
 export 'calendar_creator.dart';
 export 'calendar_event_interpreter.dart';

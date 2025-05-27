@@ -3,7 +3,9 @@ import 'package:ical/serializer.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:event_snap_2/models/calendar_event_properties.dart';
 import 'package:event_snap_2/services/calendar_creator.dart';
+import 'package:event_snap_2/services/android_calendar_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/foundation.dart';
 
 /// iCalendar implementation of CalendarCreator
 ///
@@ -86,6 +88,10 @@ class ICalendarCreator implements CalendarCreator {
   /// Takes the [filePath] returned from createIcalFile and uses the
   /// platform's file sharing mechanism to open it with calendar apps.
   ///
+  /// On Android, uses the native FileProvider system for secure file sharing
+  /// with better calendar app compatibility. Falls back to url_launcher on
+  /// other platforms or if the Android method fails.
+  ///
   /// Returns true if the file was successfully shared, false otherwise.
   Future<bool> shareIcalFile(String filePath) async {
     try {
@@ -94,10 +100,30 @@ class ICalendarCreator implements CalendarCreator {
         throw FileSystemException('iCalendar file does not exist', filePath);
       }
 
-      // Create a file URI for sharing
-      final uri = Uri.file(filePath);
+      // On Android, use the native calendar service for better integration
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        try {
+          // First check if there are calendar apps available
+          final hasApps = await AndroidCalendarService.hasCalendarApps();
+          if (!hasApps) {
+            return false;
+          }
 
-      // Launch the file with the default calendar application
+          // Attempt to share using Android's native method
+          final success = await AndroidCalendarService.shareCalendarFile(
+            filePath,
+          );
+          return success;
+        } catch (e) {
+          // If Android method fails, fall through to url_launcher
+          debugPrint(
+            'Android calendar service failed, falling back to url_launcher: $e',
+          );
+        }
+      }
+
+      // Fallback to url_launcher for other platforms or if Android method fails
+      final uri = Uri.file(filePath);
       final launched = await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
@@ -134,6 +160,28 @@ class ICalendarCreator implements CalendarCreator {
       }
     } catch (e) {
       throw Exception('Failed to access temporary directory: $e');
+    }
+  }
+
+  /// Check if calendar applications are available on the device
+  ///
+  /// Returns true if there are applications that can handle calendar files,
+  /// false otherwise. This can be used to provide appropriate user feedback
+  /// when no calendar apps are available.
+  ///
+  /// On Android, uses the native platform service to check for calendar apps.
+  /// On other platforms, assumes calendar apps are available.
+  Future<bool> hasCalendarApps() async {
+    try {
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        return await AndroidCalendarService.hasCalendarApps();
+      }
+
+      // On other platforms, assume calendar apps are available
+      return true;
+    } catch (e) {
+      // If we can't check, assume there might be apps available
+      return true;
     }
   }
 }
