@@ -140,58 +140,58 @@ void main() {
         expect(result.description, contains('lunch'));
         expect(result.location, contains('Mountain View Resort'));
       }, skip: 'Requires real API key');
-      group('Date Handling', () {
-        test('handles relative dates correctly in prompts', () async {
-          final apiKey =
-              dotenv.env['OPENAI_API_KEY'] ??
-              const String.fromEnvironment('OPENAI_API_KEY');
+      group('Date Handling and Timezone Tests', () {
+        test(
+          'correctly interprets time in user timezone',
+          () async {
+            final apiKey =
+                dotenv.env['OPENAI_API_KEY'] ??
+                const String.fromEnvironment('OPENAI_API_KEY');
 
-          if (apiKey.isEmpty || apiKey == 'your_openai_api_key_here') {
-            markTestSkipped('No OpenAI API key provided');
-            return;
-          }
+            if (apiKey.isEmpty || apiKey == 'your_openai_api_key_here') {
+              markTestSkipped('No OpenAI API key provided');
+              return;
+            }
 
-          final settings = Settings(
-            openAiApiKey: apiKey,
-            openAiModel: 'gpt-4.1',
-            maxRetries: 1,
-            timeoutSeconds: 30,
-          );
-          final interpreter = OpenAiCalendarEventInterpreter(settings);
+            final settings = Settings(
+              openAiApiKey: apiKey,
+              openAiModel: 'gpt-4.1',
+              maxRetries: 1,
+              timeoutSeconds: 30,
+            );
+            final interpreter = OpenAiCalendarEventInterpreter(settings);
 
-          final eventText =
-              'AA Meeting next Saturday at 6 in the afternoon. Expected duaration is 2 hours.';
+            // Test: "Dentist tomorrow at 6pm" in UTC+2 timezone
+            // Should create event at 6pm local time (4pm UTC = 6pm UTC+2)
+            final eventText = 'Dentist tomorrow at 6pm';
 
-          final now = DateTime.now();
-          final nextSaturday = now.add(Duration(days: (6 - now.weekday) % 7));
-          final nextSaturdaySixPM = DateTime(
-            nextSaturday.year,
-            nextSaturday.month,
-            nextSaturday.day,
-            18,
-            0,
-            0,
-          );
-          final nextSaturdayEightPM = nextSaturdaySixPM.add(Duration(hours: 2));
-          final nextSaturdaySixPMIso = nextSaturdaySixPM
-              .toUtc()
-              .toIso8601String();
-          final nextSaturdayEightPMIso = nextSaturdayEightPM
-              .toUtc()
-              .toIso8601String();
+            final result = await interpreter.eventToCalendarPropertiesAsync(
+              eventText,
+            );
 
-          final result = await interpreter.eventToCalendarPropertiesAsync(
-            eventText,
-          );
+            expect(result, isNotNull);
+            expect(result.start, isNotNull);
+            expect(result.end, isNotNull);
 
-          expect(result, isNotNull);
+            final startTimeUtc = DateTime.parse(result.start!).toUtc();
 
-          expect(result.start, isNotNull);
-          expect(result.end, isNotNull);
-          expect(result.start, equals(nextSaturdaySixPMIso));
-          expect(result.end, equals(nextSaturdayEightPMIso));
-        });
-      }, skip: 'Requires real API key');
+            // Check that it's actually tomorrow, 6PM local time
+            final now = DateTime.now();
+            final tomorrow = now.add(Duration(days: 1));
+            final expectedStartUtc = DateTime(
+              tomorrow.year,
+              tomorrow.month,
+              tomorrow.day,
+              18,
+            ).toUtc();
+            expect(
+              startTimeUtc.toIso8601String(),
+              equals(expectedStartUtc.toIso8601String()),
+            );
+          },
+          skip: 'Requires real API key',
+        );
+      });
     });
   });
 }

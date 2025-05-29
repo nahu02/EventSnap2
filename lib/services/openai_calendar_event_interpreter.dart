@@ -5,6 +5,7 @@ import 'package:event_snap_2/models/calendar_event_properties.dart';
 import 'package:event_snap_2/models/settings.dart';
 import 'package:event_snap_2/services/calendar_event_interpreter.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart';
 
 /// OpenAI implementation of CalendarEventInterpreter
 ///
@@ -102,6 +103,9 @@ class OpenAiCalendarEventInterpreter implements CalendarEventInterpreter {
     final now = DateTime.now();
     final todayFormatted = DateFormat('EEEE, MMMM d, yyyy').format(now);
     final currentTimeFormatted = DateFormat('h:mm a').format(now);
+    final timezoneOffset = now.timeZoneOffset;
+    final timezoneOffsetString = _formatTimezoneOffset(timezoneOffset);
+    final timezoneName = now.timeZoneName;
 
     return [
       // System message with instructions
@@ -109,7 +113,12 @@ class OpenAiCalendarEventInterpreter implements CalendarEventInterpreter {
         role: OpenAIChatMessageRole.system,
         content: [
           OpenAIChatCompletionChoiceMessageContentItemModel.text(
-            _getSystemPrompt(todayFormatted, currentTimeFormatted),
+            _getSystemPrompt(
+              todayFormatted,
+              currentTimeFormatted,
+              timezoneOffsetString,
+              timezoneName,
+            ),
           ),
         ],
       ),
@@ -161,12 +170,18 @@ class OpenAiCalendarEventInterpreter implements CalendarEventInterpreter {
   }
 
   /// Generates the system prompt with current date context
-  String _getSystemPrompt(String todayFormatted, String currentTimeFormatted) {
+  String _getSystemPrompt(
+    String todayFormatted,
+    String currentTimeFormatted,
+    String timezoneOffset,
+    String timezoneName,
+  ) {
     return '''You are a calendar event extraction assistant. Extract calendar event information from natural language text and return it as JSON.
 
 Current context:
 - Today is: $todayFormatted
 - Current time is: $currentTimeFormatted
+- User timezone: $timezoneName ($timezoneOffset)
 
 Rules:
 1. Always return valid JSON with this exact structure:
@@ -174,8 +189,8 @@ Rules:
   "Summary": "event title",
   "Description": "additional details (optional)",
   "Location": "event location (optional)", 
-  "Start": "ISO 8601 datetime string",
-  "End": "ISO 8601 datetime string"
+  "Start": "ISO 8601 datetime string with timezone",
+  "End": "ISO 8601 datetime string with timezone"
 }
 
 2. Date/time interpretation:
@@ -184,15 +199,17 @@ Rules:
    - "at 2pm" = 14:00 in 24-hour format
    - If no end time specified, assume 1 hour duration
    - If no date specified, assume today
-   - Use ISO 8601 format: "2025-05-28T14:00:00.000Z"
+   - IMPORTANT: All times should be interpreted in the user's local timezone ($timezoneName), unless specified otherwise.
+   - Use ISO 8601 format with timezone offset: "2025-05-28T14:00:00$timezoneOffset"
 
 3. Field requirements:
    - Summary: Required, extract main event purpose
    - Description: Optional, include additional context
    - Location: Optional, only if mentioned
-   - Start/End: Required, must be valid ISO 8601 datetime
+   - Start/End: Required, must be valid ISO 8601 datetime with timezone
 
-4. If the text is unclear or missing critical information, make reasonable assumptions based on context.''';
+4. If the text is unclear or missing critical information, make reasonable assumptions based on context.
+5. When interpreting times like "4pm", this means 16:00 in the user's local timezone ($timezoneName), not UTC.''';
   }
 
   /// Generates example response 1 with dynamic dates
@@ -211,8 +228,8 @@ Rules:
       "Summary": "Team meeting",
       "Description": "Weekly team meeting to discuss project progress",
       "Location": "Conference room A",
-      "Start": startTime.toUtc().toIso8601String(),
-      "End": endTime.toUtc().toIso8601String(),
+      "Start": _formatDateTimeWithTimezone(startTime),
+      "End": _formatDateTimeWithTimezone(endTime),
     });
   }
 
@@ -237,9 +254,24 @@ Rules:
       "Summary": "Dentist appointment",
       "Description": null,
       "Location": null,
-      "Start": startTime.toUtc().toIso8601String(),
-      "End": endTime.toUtc().toIso8601String(),
+      "Start": _formatDateTimeWithTimezone(startTime),
+      "End": _formatDateTimeWithTimezone(endTime),
     });
+  }
+
+  /// Formats timezone offset as +HH:MM or -HH:MM
+  String _formatTimezoneOffset(Duration offset) {
+    final hours = offset.inHours;
+    final minutes = offset.inMinutes.remainder(60).abs();
+    final sign = hours >= 0 ? '+' : '-';
+    return '$sign${hours.abs().toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
+  }
+
+  /// Formats a DateTime with local timezone offset
+  String _formatDateTimeWithTimezone(DateTime dateTime) {
+    final offset = dateTime.timeZoneOffset;
+    final offsetString = _formatTimezoneOffset(offset);
+    return '${dateTime.toIso8601String().split('.')[0]}$offsetString';
   }
 
   /// Parses JSON response from OpenAI into CalendarEventProperties

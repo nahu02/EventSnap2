@@ -344,7 +344,9 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      DateFormat('MMM dd, yyyy - HH:mm').format(dateTime),
+                      DateFormat(
+                        'MMM dd, yyyy - HH:mm',
+                      ).format(dateTime.toLocal()),
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
