@@ -25,7 +25,7 @@ void main() {
     setUp(() {
       validSettings = Settings(
         openAiApiKey: 'sk-test123456789abcdef',
-        openAiModel: 'gpt-4',
+        openAiModel: 'gpt-4.1-nano',
         maxRetries: 3,
         timeoutSeconds: 30,
       );
@@ -91,7 +91,7 @@ void main() {
 
         final settings = Settings(
           openAiApiKey: apiKey,
-          openAiModel: 'gpt-4.1',
+          openAiModel: 'gpt-4.1-nano',
           maxRetries: 1,
           timeoutSeconds: 30,
         );
@@ -119,7 +119,7 @@ void main() {
 
         final settings = Settings(
           openAiApiKey: apiKey,
-          openAiModel: 'gpt-4.1',
+          openAiModel: 'gpt-4.1-nano',
           maxRetries: 1,
           timeoutSeconds: 30,
         );
@@ -155,7 +155,7 @@ void main() {
 
             final settings = Settings(
               openAiApiKey: apiKey,
-              openAiModel: 'gpt-4.1',
+              openAiModel: 'gpt-4.1-nano',
               maxRetries: 1,
               timeoutSeconds: 30,
             );

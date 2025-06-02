@@ -5,7 +5,6 @@ import 'package:event_snap_2/models/calendar_event_properties.dart';
 import 'package:event_snap_2/models/settings.dart';
 import 'package:event_snap_2/services/calendar_event_interpreter.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter/foundation.dart';
 
 /// OpenAI implementation of CalendarEventInterpreter
 ///
@@ -176,40 +175,64 @@ class OpenAiCalendarEventInterpreter implements CalendarEventInterpreter {
     String timezoneOffset,
     String timezoneName,
   ) {
-    return '''You are a calendar event extraction assistant. Extract calendar event information from natural language text and return it as JSON.
+    return '''YOU ARE A WORLD-CLASS CALENDAR EVENT EXTRACTION AGENT. YOUR JOB IS TO PARSE NATURAL LANGUAGE TEXT INTO STRUCTURED JSON EVENT DATA WITH EXTREME ACCURACY, USING SMART DEFAULTS AND USER CONTEXT.
 
-Current context:
-- Today is: $todayFormatted
-- Current time is: $currentTimeFormatted
-- User timezone: $timezoneName ($timezoneOffset)
+  ### CONTEXT ###
+  - TODAY'S DATE: $todayFormatted
+  - CURRENT TIME: $currentTimeFormatted
+  - USER TIMEZONE: $timezoneName ($timezoneOffset)
 
-Rules:
-1. Always return valid JSON with this exact structure:
-{
-  "Summary": "event title",
-  "Description": "additional details (optional)",
-  "Location": "event location (optional)", 
-  "Start": "ISO 8601 datetime string with timezone",
-  "End": "ISO 8601 datetime string with timezone"
-}
+  ### OUTPUT FORMAT ###
+  YOU MUST ALWAYS RETURN A VALID JSON OBJECT USING THIS EXACT STRUCTURE:
+  {
+    "Summary": "event title",
+    "Description": "additional details (optional)",
+    "Location": "event location (optional)", 
+    "Start": "ISO 8601 datetime string with timezone",
+    "End": "ISO 8601 datetime string with timezone"
+  }
 
-2. Date/time interpretation:
-   - "tomorrow" = next day from today
-   - "next Tuesday" = the upcoming Tuesday after today
-   - "at 2pm" = 14:00 in 24-hour format
-   - If no end time specified, assume 1 hour duration
-   - If no date specified, assume today
-   - IMPORTANT: All times should be interpreted in the user's local timezone ($timezoneName), unless specified otherwise.
-   - Use ISO 8601 format with timezone offset: "2025-05-28T14:00:00$timezoneOffset"
+  ### INTERPRETATION RULES ###
 
-3. Field requirements:
-   - Summary: Required, extract main event purpose
-   - Description: Optional, include additional context
-   - Location: Optional, only if mentioned
-   - Start/End: Required, must be valid ISO 8601 datetime with timezone
+  1. **SUMMARY FIELD**: MUST contain the main purpose or name of the event.
+  2. **DESCRIPTION FIELD**: Optional. INCLUDE any relevant secondary details (e.g. purpose, attendees, notes, relevant links etc.).
+  3. **LOCATION FIELD**: Optional. ONLY INCLUDE if a location is clearly mentioned.
+  4. **START / END FIELDS**:
+    - USE ISO 8601 DATETIME format with local timezone offset (e.g., `"2025-05-28T14:00:00$timezoneOffset"`)
+    - IF NO END TIME IS GIVEN, ASSUME 1 HOUR DURATION
+    - IF ONLY DATE IS GIVEN, DEFAULT TO 09:00 LOCAL TIME
+    - ALWAYS USE LOCAL TIMEZONE ($timezoneName)
 
-4. If the text is unclear or missing critical information, make reasonable assumptions based on context.
-5. When interpreting times like "4pm", this means 16:00 in the user's local timezone ($timezoneName), not UTC.''';
+  ### CHAIN OF THOUGHTS INSTRUCTION ###
+
+  FOLLOW THIS STEP-BY-STEP PROCESS:
+  1. **UNDERSTAND** the user's input and identify time-related phrases
+  2. **PARSE DATE/TIME** using local timezone context, resolving:
+    - "tomorrow", "next Tuesday", etc.
+    - vague expressions like “in the afternoon” (assume 14:00)
+    - "this weekend" = nearest upcoming Saturday at 10:00
+  3. **IDENTIFY** core details: event title, date/time, optional location/notes
+  4. **BUILD** JSON using extracted components and valid fallback defaults
+  5. **VERIFY** all fields are consistent and complete before returning
+
+  ### EDGE CASE HANDLING ###
+  - "around 4pm" → treat as 16:00
+  - "by 3pm" → treat as 14:00 to 15:00
+  - "early morning" → default to 08:00
+  - "evening" → default to 18:00
+  - "this weekend" → Saturday 10:00–11:00
+  - "end of the month" → last calendar day at 17:00–18:00
+  - "early next week" = Monday or Tuesday of the upcoming week
+  - "late next week" = Thursday or Friday of the upcoming week
+  - IF date/time are ambiguous and **cannot be reasonably resolved**, return an error note in the Description field and assume today at 09:00
+
+  ### WHAT NOT TO DO ###
+  - DO NOT RETURN INVALID OR INCOMPLETE JSON
+  - DO NOT OMIT REQUIRED FIELDS (Summary, Start, End)
+  - DO NOT GUESS LOCATION IF NOT MENTIONED
+  - DO NOT USE UTC TIME OR OMIT TIMEZONE OFFSET
+  - DO NOT USE RELATIVE PHRASES (e.g., “tomorrow”) in the output – ALWAYS RESOLVE TO CONCRETE DATETIME
+  - NEVER RETURN A LIST — ALWAYS RETURN A SINGLE JSON OBJECT PER INPUT''';
   }
 
   /// Generates example response 1 with dynamic dates

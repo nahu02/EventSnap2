@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     
     <application
-        android:label="event_snap_2"
+        android:label="EventSnap 2"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         <activity

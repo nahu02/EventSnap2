@@ -4,7 +4,7 @@
 
 ### Step 1: Create Flutter Project Structure
 - [x] **Tasks:**
-  - [x] Initialize a new Flutter project with `flutter create --project-name EventSnap2`
+  - [x] Initialize a new Flutter project with `flutter create --project-name event_snap_2`
   - [x] Set up proper folder structure (lib/screens, lib/models, lib/services, lib/widgets)
   - [x] Configure Git repository for version control
 - [x] **Considerations:**
@@ -214,20 +214,20 @@
 ## Phase 5: Prompt Engineering and AI Integration
 
 ### Step 14: Advanced Prompt Engineering
-- [ ] **Tasks:**
-  - [ ] Refine system prompt for optimal event extraction
-  - [ ] Create comprehensive example messages
-  - [ ] Implement dynamic date references in examples
-  - [ ] Optimize temperature and other model parameters
-- [ ] **Considerations:**
-  - [ ] Examples should cover various event types and formats
-  - [ ] Balance between specificity and generalization
-- [ ] **Definition of Done:**
-  - [ ] System prompt produces consistent, structured results
-  - [ ] Examples updated dynamically based on current date
-  - [ ] AI successfully extracts event details from various text formats
-  - [ ] Parameter tuning optimizes response quality
-  - [ ] Tested with diverse input formats and styles
+- [x] **Tasks:**
+  - [x] Refine system prompt for optimal event extraction
+  - [x] Create comprehensive example messages
+  - [x] Implement dynamic date references in examples
+  - [x] Optimize temperature and other model parameters
+- [x] **Considerations:**
+  - [x] Examples should cover various event types and formats
+  - [x] Balance between specificity and generalization
+- [x] **Definition of Done:**
+  - [x] System prompt produces consistent, structured results
+  - [x] Examples updated dynamically based on current date
+  - [x] AI successfully extracts event details from various text formats
+  - [x] Parameter tuning optimizes response quality
+  - [x] Tested with diverse input formats and styles
 
 ### Step 15: Response Parsing and Validation
 - [ ] **Tasks:**
