@@ -47,7 +47,7 @@ jobs:
         run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/eventsnap2.apk
 
       - name: Upload APK
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: eventsnap2-apk
           path: build/app/outputs/flutter-apk/eventsnap2.apk
