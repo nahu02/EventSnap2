@@ -14,9 +14,42 @@ on:
       - '.github/workflows/main.yml'
 
 jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract_version.outputs.version }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history and tags
+      
+      - name: Extract version from pubspec.yaml
+        id: extract_version
+        run: |
+          version=$(grep '^version: ' pubspec.yaml | cut -d ' ' -f 2 | tr -d '\r')
+          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "Extracted version: $version"
+      
+      - name: Fetch all tags
+        run: git fetch --tags
+      
+      - name: Check if version tag already exists
+        run: |
+          version="${{ steps.extract_version.outputs.version }}"
+          if git rev-parse "v$version" >/dev/null 2>&1; then
+            echo "❌ Error: Tag v$version already exists!"
+            echo "Please update the version in pubspec.yaml before pushing."
+            exit 1
+          else
+            echo "✅ Version v$version is available for release"
+          fi
+
   build:
     runs-on: macos-latest
-
+    needs: version-check
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -61,32 +94,23 @@ jobs:
         with:
           name: eventsnap2-apk
           path: build/app/outputs/flutter-apk/eventsnap2.apk
-      
-      - name: Extract version from pubspec.yaml
-        id: extract_version
-        run: |
-          version=$(grep '^version: ' pubspec.yaml | cut -d ' ' -f 2 | tr -d '\r')
-          echo "VERSION=$version" >> $GITHUB_ENV
-
-      - name: Check if Tag Exists
-        id: check_tag
-        run: |
-          if git rev-parse "v${{ env.VERSION }}" >/dev/null 2>&1; then
-            echo "TAG_EXISTS=true" >> $GITHUB_ENV
-          else
-            echo "TAG_EXISTS=false" >> $GITHUB_ENV
-          fi
-
-      - name: Modify Tag
-        if: env.TAG_EXISTS == 'true'
-        id: modify_tag
-        run: |
-          new_version="${{ env.VERSION }}-build-${{ github.run_number }}"
-          echo "VERSION=$new_version" >> $GITHUB_ENV
         
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
           artifacts: "build/app/outputs/flutter-apk/eventsnap2.apk"
-          tag: v${{ env.VERSION }}
+          tag: v${{ needs.version-check.outputs.version }}
           token: ${{ secrets.TOKEN }}
+          name: "EventSnap2 v${{ needs.version-check.outputs.version }}"
+          body: |
+            🚀 **EventSnap2 Release v${{ needs.version-check.outputs.version }}**
+            
+            ## What's New
+            - Built from commit: ${{ github.sha }}
+            - Build number: ${{ github.run_number }}
+            
+            ## Download
+            - [📱 Android APK](https://github.com/${{ github.repository }}/releases/download/v${{ needs.version-check.outputs.version }}/eventsnap2.apk)
+            
+            ---
+            *This release was automatically generated from the main branch.*
