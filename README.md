@@ -2,6 +2,8 @@
 
 A Flutter mobile application that converts natural language text into calendar events using OpenAI's GPT models. EventSnap2 intelligently extracts event details from plain text descriptions and generates standard iCalendar (.ics) files that integrate seamlessly with calendar applications.
 
+The current implementation targets Android only, but it may work on other platformsa as well.
+
 ## Description
 
 EventSnap2 leverages AI-powered natural language processing to transform conversational event descriptions into structured calendar entries. The app features Android sharing integration, allowing users to share text from any application directly to EventSnap2 for instant event creation. Built with Flutter for cross-platform compatibility, it uses secure storage for API keys and implements robust error handling with retry logic.
