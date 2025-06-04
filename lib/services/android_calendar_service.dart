@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 /// using Android's native file provider and intent system for better compatibility.
 class AndroidCalendarService {
   static const MethodChannel _channel = MethodChannel(
-    'com.example.event_snap_2/calendar',
+    'hu.nahu02.event_snap_2/calendar',
   );
 
   /// Share a calendar file with calendar applications

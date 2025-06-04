@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 /// including shared text intents and method channel communication
 class AndroidPlatformService {
   static const MethodChannel _channel = MethodChannel(
-    'com.example.event_snap_2/share',
+    'hu.nahu02.event_snap_2/share',
   );
 
   /// Gets shared text from Android intent if available

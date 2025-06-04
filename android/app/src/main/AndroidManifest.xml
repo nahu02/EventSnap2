@@ -45,7 +45,7 @@
         <!-- File provider for sharing .ics files -->
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.example.event_snap_2.fileprovider"
+            android:authorities="hu.nahu02.event_snap_2.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

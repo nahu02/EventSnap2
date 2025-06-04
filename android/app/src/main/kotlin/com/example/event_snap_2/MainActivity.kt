@@ -1,4 +1,4 @@
-package com.example.event_snap_2
+package hu.nahu02.event_snap_2
 
 import android.content.Intent
 import android.os.Bundle
@@ -11,8 +11,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.example.event_snap_2/share"
-    private val CALENDAR_CHANNEL = "com.example.event_snap_2/calendar"
+    private val CHANNEL = "hu.nahu02.event_snap_2/share"
+    private val CALENDAR_CHANNEL = "hu.nahu02.event_snap_2/calendar"
     private var sharedText: String? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -99,7 +99,7 @@ class MainActivity : FlutterActivity() {
             // Create file provider URI for secure sharing
             val fileUri: Uri = FileProvider.getUriForFile(
                 this,
-                "com.example.event_snap_2.fileprovider",
+                "hu.nahu02.event_snap_2.fileprovider",
                 file
             )
             
