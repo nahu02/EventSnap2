@@ -35,6 +35,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _successMessage;
   String? _modelLoadError;
 
+  // Track the actual API key for show/hide functionality
+  String _actualApiKey = '';
+  bool _isShowingSavedKey = false;
+
   // Available OpenAI models (fetched dynamically)
   List<String> _availableModels = [
     'gpt-4.1',
@@ -62,7 +66,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (settings != null) {
       setState(() {
-        // Mask the API key for security
+        _actualApiKey = settings.openAiApiKey;
+        _isShowingSavedKey = settings.openAiApiKey.isNotEmpty;
+
+        // Show masked version for saved keys, empty for no key
         _apiKeyController.text = settings.openAiApiKey.isNotEmpty
             ? '•' *
                   20 // Show masked version
@@ -71,6 +78,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _maxRetries = settings.maxRetries;
         _timeoutSeconds = settings.timeoutSeconds;
         _debugMode = settings.debugMode;
+        // Set obscure to false when showing masked version, true when empty
+        _obscureApiKey = settings.openAiApiKey.isEmpty;
       });
 
       // Fetch available models if API key is available
@@ -78,6 +87,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _fetchAvailableModels();
       }
     }
+  }
+
+  /// Toggle API key visibility - handles both saved and new keys
+  void _toggleApiKeyVisibility() {
+    setState(() {
+      if (_isShowingSavedKey) {
+        // For saved keys: toggle between masked and actual key
+        if (_apiKeyController.text.startsWith('•')) {
+          // Currently showing masked, switch to actual key
+          _apiKeyController.text = _actualApiKey;
+          _obscureApiKey = false;
+        } else {
+          // Currently showing actual key, switch to masked
+          _apiKeyController.text = '•' * 20;
+          _obscureApiKey = false;
+        }
+      } else {
+        // For new/empty keys: just toggle obscureText
+        _obscureApiKey = !_obscureApiKey;
+      }
+    });
   }
 
   /// Clear messages
@@ -298,6 +328,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _timeoutSeconds = 30;
         _debugMode = false;
         _obscureApiKey = true;
+        _actualApiKey = '';
+        _isShowingSavedKey = false;
       });
 
       _clearMessages();
@@ -310,12 +342,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final uri = Uri.parse(url);
 
     try {
-      final canLaunch = await canLaunchUrl(uri);
-      if (canLaunch) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        _showError('Could not open documentation. Please visit: $url');
-      }
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (e) {
       _showError('Error opening documentation: $e');
     }
@@ -470,15 +497,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 children: [
                                   IconButton(
                                     icon: Icon(
-                                      _obscureApiKey
+                                      _obscureApiKey ||
+                                              (_isShowingSavedKey &&
+                                                  _apiKeyController.text
+                                                      .startsWith('•'))
                                           ? Icons.visibility
                                           : Icons.visibility_off,
                                     ),
-                                    onPressed: () {
-                                      setState(() {
-                                        _obscureApiKey = !_obscureApiKey;
-                                      });
-                                    },
+                                    onPressed: _toggleApiKeyVisibility,
                                   ),
                                   IconButton(
                                     icon: const Icon(Icons.help_outline),
@@ -492,7 +518,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             obscureText: _obscureApiKey,
                             validator: _validateApiKey,
-                            onChanged: (_) => _clearMessages(),
+                            onChanged: (value) {
+                              _clearMessages();
+                              // If user starts typing and we were showing a saved key, reset state
+                              if (_isShowingSavedKey &&
+                                  !value.startsWith('•')) {
+                                setState(() {
+                                  _isShowingSavedKey = false;
+                                  _actualApiKey = '';
+                                  _obscureApiKey = true;
+                                });
+                              }
+                            },
                           ),
 
                           const SizedBox(height: 16),
