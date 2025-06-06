@@ -1,4 +1,3 @@
-// filepath: /home/abel/Documents/HobbyProjects/EventSnap2/lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'themes/app_theme.dart';
