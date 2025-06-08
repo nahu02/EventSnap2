@@ -42,9 +42,7 @@ EventSnap2 is a Flutter mobile app that converts natural language text into cale
 │   ├── screens/         # UI screens
 │   ├── services/        # Business logic & OpenAI/iCalendar integration
 │   ├── themes/          # App theming
-│   └── widgets/         # Reusable UI components
 ├── test/                # Unit and integration tests
-└── web/                 # PWA support
 ```
 
 ---
