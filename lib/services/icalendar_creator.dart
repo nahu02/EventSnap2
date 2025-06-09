@@ -24,6 +24,7 @@ class ICalendarCreator implements CalendarCreator {
   ///
   /// Takes a list of [propertiesList] containing event data for multiple events
   /// and returns the absolute file path to the generated .ics file.
+  @override
   Future<String> createIcalFileWithMultipleEvents(
     List<CalendarEventProperties> propertiesList,
   ) async {
