@@ -1,18 +1,16 @@
+import 'package:event_snap_2/models/event_model.dart';
+import 'package:event_snap_2/navigation/app_router.dart';
+import 'package:event_snap_2/providers/app_state_provider.dart';
+import 'package:event_snap_2/services/icalendar_creator.dart';
+import 'package:event_snap_2/widgets/event_form.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
-import '../navigation/app_router.dart';
-import '../providers/app_state_provider.dart';
-import '../models/event_model.dart';
-import '../models/calendar_event_properties.dart';
-import '../services/services.dart';
+import 'package:event_snap_2/models/calendar_event_properties.dart'; // Added import
 
-/// Event details screen for viewing and editing calendar events
-///
-/// Displays a form with all event properties that can be edited by the user.
-/// Includes validation, date/time pickers, and "Add to Calendar" functionality.
 class EventDetailsScreen extends StatefulWidget {
-  final dynamic initialEvent;
+  // If a single event is passed, it will be shown directly.
+  // If multiple events are passed via AppStateProvider, they will be in ExpansionTiles.
+  final EventModel? initialEvent;
 
   const EventDetailsScreen({super.key, this.initialEvent});
 
@@ -21,61 +19,155 @@ class EventDetailsScreen extends StatefulWidget {
 }
 
 class _EventDetailsScreenState extends State<EventDetailsScreen> {
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-
-  // Form controllers
-  late final TextEditingController _titleController;
-  late final TextEditingController _descriptionController;
-  late final TextEditingController _locationController;
-
-  // Date and time values
-  late DateTime _startDateTime;
-  late DateTime _endDateTime;
-
-  // State variables
+  List<EventModel> _events = [];
   bool _isLoading = false;
-  String? _errorMessage;
-  List<String> _validationErrors = [];
-  bool _initialized = false;
+  String? _overallErrorMessage;
+
+  // Store GlobalKeys for each EventForm
+  // Changed _EventFormState to EventFormState
+  final Map<int, GlobalKey<EventFormState>> _formKeys = {};
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_initialized) {
-      _initializeFromEvent();
-      _initialized = true;
-    }
+  void initState() {
+    super.initState();
+    _loadEvents();
   }
 
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _descriptionController.dispose();
-    _locationController.dispose();
-    super.dispose();
-  }
-
-  /// Initialize form fields from the event data
-  void _initializeFromEvent() {
+  void _loadEvents() {
     final appState = context.read<AppStateProvider>();
-    final EventModel? event = widget.initialEvent ?? appState.currentEvent;
+    List<EventModel> loadedEvents = [];
 
-    if (event != null) {
-      _titleController = TextEditingController(text: event.title);
-      _descriptionController = TextEditingController(
-        text: event.description ?? '',
-      );
-      _locationController = TextEditingController(text: event.location ?? '');
-      _startDateTime = event.startDateTime;
-      _endDateTime = event.endDateTime;
+    if (widget.initialEvent != null) {
+      loadedEvents = [widget.initialEvent!];
+    } else if (appState.currentEvent != null) {
+      loadedEvents = [appState.currentEvent!];
     } else {
-      // Default values for new event
       final now = DateTime.now();
-      _titleController = TextEditingController();
-      _descriptionController = TextEditingController();
-      _locationController = TextEditingController();
-      _startDateTime = DateTime(now.year, now.month, now.day, now.hour + 1, 0);
-      _endDateTime = _startDateTime.add(const Duration(hours: 1));
+      loadedEvents = [
+        EventModel(
+          title: 'Team Meeting',
+          description: 'Weekly team sync-up.',
+          location: 'Office A',
+          startDateTime: now.add(const Duration(days: 1, hours: 10)),
+          endDateTime: now.add(const Duration(days: 1, hours: 11)),
+        ),
+        EventModel(
+          title: 'Client Call',
+          description: 'Discuss project milestones.',
+          location: 'Zoom',
+          startDateTime: now.add(const Duration(days: 2, hours: 14)),
+          endDateTime: now.add(const Duration(days: 2, hours: 15)),
+        ),
+      ];
+    }
+    setState(() {
+      _events = loadedEvents;
+      // Initialize GlobalKeys for each form
+      for (int i = 0; i < _events.length; i++) {
+        // Changed _EventFormState to EventFormState
+        _formKeys[i] = GlobalKey<EventFormState>();
+      }
+    });
+  }
+
+  Future<void> _handleShareAllEvents() async {
+    if (_events.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No events to share.')));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    _overallErrorMessage = null;
+    bool allFormsValid = true;
+    final List<CalendarEventProperties> propertiesList = [];
+
+    // Validate all forms and collect event data
+    for (int i = 0; i < _events.length; i++) {
+      final formState = _formKeys[i]?.currentState;
+      if (formState != null) {
+        if (formState.validateForm()) {
+          final eventModel = formState.getCurrentEventModel();
+          // Update the event in our local list to reflect changes
+          _events[i] = eventModel;
+          propertiesList.add(
+            CalendarEventProperties(
+              summary: eventModel.title,
+              description: eventModel.description,
+              location: eventModel.location,
+              start: eventModel.startDateTime.toIso8601String(),
+              end: eventModel.endDateTime.toIso8601String(),
+            ),
+          );
+        } else {
+          allFormsValid = false;
+        }
+      }
+    }
+
+    if (!allFormsValid) {
+      setState(() {
+        _isLoading = false;
+        _overallErrorMessage = 'Please correct the errors in the event forms.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Some event forms have errors. Please review.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (propertiesList.isEmpty && _events.isNotEmpty) {
+      setState(() {
+        _isLoading = false;
+        _overallErrorMessage =
+            'Could not gather event data. Please check forms.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not process event data. Please review forms.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final creator = ICalendarCreator();
+      final filePath = await creator.createIcalFileWithMultipleEvents(
+        propertiesList,
+      );
+      final shared = await creator.shareIcalFile(filePath);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              shared
+                  ? 'All events shared successfully!'
+                  : 'Failed to share events or no calendar apps found.',
+            ),
+            backgroundColor: shared ? Colors.green : Colors.amber,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _overallErrorMessage = 'Error sharing all events: \$e';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sharing events: \$e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -88,530 +180,123 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => AppRouter.goBack(context),
         ),
+        // Removed Share All button from AppBar actions
+        // actions: [
+        //   if (_events.length > 1)
+        //     IconButton(
+        //       icon: const Icon(Icons.share),
+        //       tooltip: 'Share All Events',
+        //       onPressed: _isLoading ? null : _handleShareAllEvents,
+        //     ),
+        // ],
       ),
       body: _buildBody(),
-      bottomNavigationBar: _buildBottomBar(),
+      // Add a bottom navigation bar for the "Add All to Calendar" button
+      bottomNavigationBar: _events.length > 1 && !_isLoading
+          ? Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.calendar_today_outlined),
+                label: const Text('Add All to Calendar'),
+                onPressed: _handleShareAllEvents,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                ),
+              ),
+            )
+          : null, // Show nothing if only one event or loading
     );
   }
 
-  /// Build the main body content
   Widget _buildBody() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Error display
-            if (_errorMessage != null) _buildErrorCard(),
-
-            // Validation errors
-            if (_validationErrors.isNotEmpty) _buildValidationErrorsCard(),
-
-            // Title field
-            _buildTitleField(),
-            const SizedBox(height: 16),
-
-            // Description field
-            _buildDescriptionField(),
-            const SizedBox(height: 16),
-
-            // Location field
-            _buildLocationField(),
-            const SizedBox(height: 24),
-
-            // Date and time section
-            _buildDateTimeSection(),
-            const SizedBox(height: 24),
-
-            // Event summary
-            // _buildEventSummary(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Build error message card
-  Widget _buildErrorCard() {
-    return Card(
-      color: Theme.of(context).colorScheme.errorContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            Icon(
-              Icons.error_outline,
-              color: Theme.of(context).colorScheme.onErrorContainer,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
+    // Adjusted isLoading check to only show loader if it's for the "Add All" operation
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_overallErrorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Card(
+            color: Theme.of(context).colorScheme.errorContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
               child: Text(
-                _errorMessage!,
+                _overallErrorMessage!,
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onErrorContainer,
                 ),
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: () => setState(() => _errorMessage = null),
-              color: Theme.of(context).colorScheme.onErrorContainer,
-            ),
-          ],
+          ),
         ),
-      ),
-    );
-  }
+      );
+    }
 
-  /// Build validation errors card
-  Widget _buildValidationErrorsCard() {
-    return Card(
-      color: Theme.of(context).colorScheme.errorContainer,
-      child: Padding(
+    if (_events.isEmpty) {
+      return const Center(child: Text('No event details to display.'));
+    }
+
+    // If only one event, display it directly without ExpansionTile
+    if (_events.length == 1) {
+      // Ensure a key is assigned if not already
+      _formKeys.putIfAbsent(0, () => GlobalKey<EventFormState>());
+      return SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.warning_amber_outlined,
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Validation Errors',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onErrorContainer,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ..._validationErrors.map(
-              (error) => Padding(
-                padding: const EdgeInsets.only(left: 24.0, bottom: 4.0),
-                child: Text(
-                  '• $error',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onErrorContainer,
-                  ),
-                ),
-              ),
-            ),
-          ],
+        child: EventForm(
+          key: _formKeys[0],
+          initialEvent: _events.first,
+          onChanged: (updatedEvent) {
+            if (mounted) {
+              setState(() {
+                _events[0] = updatedEvent;
+              });
+            }
+          },
         ),
-      ),
-    );
-  }
+      );
+    }
 
-  /// Build title input field
-  Widget _buildTitleField() {
-    return TextFormField(
-      controller: _titleController,
-      decoration: const InputDecoration(
-        labelText: 'Event Title *',
-        hintText: 'Enter the event title',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.title),
-      ),
-      validator: (value) {
-        if (value == null || value.trim().isEmpty) {
-          return 'Title is required';
-        }
-        return null;
-      },
-      textInputAction: TextInputAction.next,
-      onChanged: (_) => _clearErrors(),
-    );
-  }
-
-  /// Build description input field
-  Widget _buildDescriptionField() {
-    return TextFormField(
-      controller: _descriptionController,
-      decoration: const InputDecoration(
-        labelText: 'Description',
-        hintText: 'Enter event description (optional)',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.description),
-        alignLabelWithHint: true,
-      ),
-      maxLines: 3,
-      textInputAction: TextInputAction.next,
-      onChanged: (_) => _clearErrors(),
-    );
-  }
-
-  /// Build location input field
-  Widget _buildLocationField() {
-    return TextFormField(
-      controller: _locationController,
-      decoration: const InputDecoration(
-        labelText: 'Location',
-        hintText: 'Enter event location (optional)',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.location_on),
-      ),
-      textInputAction: TextInputAction.done,
-      onChanged: (_) => _clearErrors(),
-    );
-  }
-
-  /// Build date and time section
-  Widget _buildDateTimeSection() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Date & Time', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 16),
-
-            // Start date and time
-            _buildDateTimeField(
-              label: 'Start',
-              dateTime: _startDateTime,
-              onChanged: (newDateTime) {
-                setState(() {
-                  _startDateTime = newDateTime;
-                  // Ensure end time is after start time
-                  if (_endDateTime.isBefore(_startDateTime)) {
-                    _endDateTime = _startDateTime.add(const Duration(hours: 1));
+    // If multiple events, display them in a ListView of ExpansionTiles
+    return ListView.builder(
+      padding: const EdgeInsets.all(8.0),
+      itemCount: _events.length,
+      itemBuilder: (context, index) {
+        // Ensure a key is assigned if not already
+        _formKeys.putIfAbsent(index, () => GlobalKey<EventFormState>());
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 0.0),
+          child: ExpansionTile(
+            maintainState: true, // Add this line
+            leading: const Icon(
+              Icons.event_note,
+            ), // Or use ExpansionTileController for custom arrow
+            title: Text(
+              _events[index].title.isNotEmpty
+                  ? _events[index].title
+                  : 'Event ${index + 1}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(_events[index].formattedTimeRange),
+            children: [
+              EventForm(
+                key: _formKeys[index],
+                initialEvent:
+                    _events[index], // Pass the event from the _events list
+                onChanged: (updatedEvent) {
+                  if (mounted) {
+                    setState(() {
+                      _events[index] = updatedEvent;
+                    });
                   }
-                });
-                _clearErrors();
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // End date and time
-            _buildDateTimeField(
-              label: 'End',
-              dateTime: _endDateTime,
-              onChanged: (newDateTime) {
-                setState(() {
-                  _endDateTime = newDateTime;
-                });
-                _clearErrors();
-              },
-            ),
-
-            const SizedBox(height: 12),
-
-            // Duration display
-            _buildDurationDisplay(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Build date and time field
-  Widget _buildDateTimeField({
-    required String label,
-    required DateTime dateTime,
-    required ValueChanged<DateTime> onChanged,
-  }) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 60,
-          child: Text('$label:', style: Theme.of(context).textTheme.labelLarge),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: InkWell(
-            onTap: () => _pickDateTime(dateTime, onChanged),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outline,
-                ),
-                borderRadius: BorderRadius.circular(8),
+                },
               ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.access_time,
-                    size: 20,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      DateFormat(
-                        'MMM dd, yyyy - HH:mm',
-                      ).format(dateTime.toLocal()),
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  Icon(
-                    Icons.keyboard_arrow_down,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ],
-              ),
-            ),
+            ],
           ),
-        ),
-      ],
+        );
+      },
     );
-  }
-
-  /// Build duration display
-  Widget _buildDurationDisplay() {
-    final duration = _endDateTime.difference(_startDateTime);
-    final durationText = _formatDuration(duration);
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.schedule,
-            size: 16,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'Duration: $durationText',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Build event summary card
-  /// Build bottom navigation bar with action buttons
-  Widget _buildBottomBar() {
-    return Container(
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          top: BorderSide(
-            color: Theme.of(context).colorScheme.outline,
-            width: 0.5,
-          ),
-        ),
-      ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _isLoading ? null : () => AppRouter.goBack(context),
-                icon: const Icon(Icons.cancel_outlined),
-                label: const Text('Cancel'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _isLoading ? null : _addToCalendar,
-                icon: _isLoading
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.calendar_today),
-                label: Text(_isLoading ? 'Adding...' : 'Add to Calendar'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Pick date and time
-  Future<void> _pickDateTime(
-    DateTime currentDateTime,
-    ValueChanged<DateTime> onChanged,
-  ) async {
-    // Pick date
-    final pickedDate = await showDatePicker(
-      context: context,
-      initialDate: currentDateTime,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
-    );
-
-    if (pickedDate == null) return;
-
-    // Pick time
-    if (!mounted) return;
-    final pickedTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(currentDateTime),
-    );
-
-    if (pickedTime == null) return;
-
-    // Combine date and time
-    final newDateTime = DateTime(
-      pickedDate.year,
-      pickedDate.month,
-      pickedDate.day,
-      pickedTime.hour,
-      pickedTime.minute,
-    );
-
-    onChanged(newDateTime);
-  }
-
-  /// Format duration for display
-  String _formatDuration(Duration duration) {
-    if (duration.inDays > 0) {
-      return '${duration.inDays} day${duration.inDays > 1 ? 's' : ''}';
-    } else if (duration.inHours > 0) {
-      final hours = duration.inHours;
-      final minutes = duration.inMinutes % 60;
-      if (minutes > 0) {
-        return '${hours}h ${minutes}m';
-      } else {
-        return '$hours hour${hours > 1 ? 's' : ''}';
-      }
-    } else {
-      return '${duration.inMinutes} minute${duration.inMinutes > 1 ? 's' : ''}';
-    }
-  }
-
-  /// Add event to calendar
-  Future<void> _addToCalendar() async {
-    _clearErrors();
-
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      // Create and validate event
-      final event = _createEventModel();
-      final validationErrors = event.validate();
-
-      if (validationErrors.isNotEmpty) {
-        setState(() {
-          _validationErrors = validationErrors;
-        });
-        return;
-      }
-
-      // Convert to CalendarEventProperties
-      final properties = CalendarEventProperties.fromEventModel(event);
-
-      // Capture the app state provider before async operations
-      final appState = context.read<AppStateProvider>();
-
-      // Create iCalendar file
-      final iCalendarCreator = ICalendarCreator();
-      final filePath = await iCalendarCreator.createIcalFile(properties);
-
-      // Check if calendar apps are available before attempting to share
-      final hasCalendarApps = await iCalendarCreator.hasCalendarApps();
-      if (!hasCalendarApps) {
-        setState(() {
-          _errorMessage =
-              'No calendar applications found on this device. Please install a calendar app to add events.';
-        });
-        return;
-      }
-
-      // Share the file
-      final success = await iCalendarCreator.shareIcalFile(filePath);
-
-      if (success) {
-        // Update app state
-        appState.setCurrentEvent(event);
-
-        // Show success message and navigate back
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Event added to calendar successfully!'),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-
-          // Navigate back to home
-          AppRouter.navigateToHome(context);
-        }
-      } else {
-        setState(() {
-          _errorMessage =
-              'Unable to open calendar file. Please ensure you have a calendar app installed that can handle .ics files.';
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = _getErrorMessage(e);
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  /// Create EventModel from form data
-  EventModel _createEventModel() {
-    return EventModel(
-      title: _titleController.text.trim(),
-      description: _descriptionController.text.trim().isEmpty
-          ? null
-          : _descriptionController.text.trim(),
-      location: _locationController.text.trim().isEmpty
-          ? null
-          : _locationController.text.trim(),
-      startDateTime: _startDateTime,
-      endDateTime: _endDateTime,
-    );
-  }
-
-  /// Clear all error states
-  void _clearErrors() {
-    if (_errorMessage != null || _validationErrors.isNotEmpty) {
-      setState(() {
-        _errorMessage = null;
-        _validationErrors = [];
-      });
-    }
-  }
-
-  /// Get user-friendly error message
-  String _getErrorMessage(Object error) {
-    final errorString = error.toString();
-    debugPrint('Error occurred on Event Details Screen: $errorString');
-
-    if (errorString.contains('file system') ||
-        errorString.contains('directory')) {
-      return 'Unable to create calendar file. Please check storage permissions.';
-    } else if (errorString.contains('network') ||
-        errorString.contains('connection')) {
-      return 'Network error. Please check your connection and try again.';
-    } else if (errorString.contains('permission')) {
-      return 'Permission denied. Please check app permissions.';
-    } else {
-      return 'An unexpected error occurred. Please try again.';
-    }
   }
 }

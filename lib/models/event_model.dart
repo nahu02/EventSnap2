@@ -129,6 +129,34 @@ class EventModel {
   String get formattedEndTime =>
       DateFormat('MMM dd, yyyy - HH:mm').format(endDateTime);
 
+  /// Gets a formatted string representing the time range of the event
+  String get formattedTimeRange {
+    final now = DateTime.now();
+    final isStartInCurrentYear = startDateTime.year == now.year;
+    final isEndInCurrentYear = endDateTime.year == now.year;
+
+    final startFormat = isStartInCurrentYear
+        ? 'MMM dd; HH:mm'
+        : 'MMM dd, yyyy; HH:mm';
+    final startFormatted = DateFormat(startFormat).format(startDateTime);
+
+    final String endFormatted;
+    if (startDateTime.day == endDateTime.day &&
+        startDateTime.month == endDateTime.month &&
+        startDateTime.year == endDateTime.year) {
+      // Same day - only show time
+      endFormatted = DateFormat('HH:mm').format(endDateTime);
+    } else {
+      // Different day - show date and time, include year if not current year
+      final endFormat = isEndInCurrentYear
+          ? 'MMM dd; HH:mm'
+          : 'MMM dd, yyyy; HH:mm';
+      endFormatted = DateFormat(endFormat).format(endDateTime);
+    }
+
+    return '$startFormatted - $endFormatted';
+  }
+
   /// Gets a human-readable duration string
   String get formattedDuration {
     final duration = this.duration;
