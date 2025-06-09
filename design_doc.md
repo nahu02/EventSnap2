@@ -433,19 +433,9 @@ The AI must be provided the current datetime at the time of the user's message.
    - Test iCalendar file generation
    - Test event data validation
 
-2. **Widget Tests**
-   - Test UI form behavior
-   - Test loading states
-   - Test error displays
-
-3. **Integration Tests**
-   - Test end-to-end flow with mock AI responses
-   - Test sharing integration on real devices
-
-4. **Manual Testing Focus Areas**
-   - Testing a variety of natural language inputs
-   - Testing with different calendar apps
-   - Testing share functionality from multiple apps
+2. **Integration Tests**
+   - Test end-to-end flow with real AI responses
+   - Test if the model can follow the systemprompt's instructions, produce parseable events
 
 ## Dependencies
 
@@ -456,7 +446,7 @@ The AI must be provided the current datetime at the time of the user's message.
 5. **path_provider**: For file system access
 6. **url_launcher**: For opening the .ics file
 7. **ical**: For generating iCalendar (.ics) files
-8. **provider** or **flutter_bloc**: For state management
+8. **provider**: For state management
 
 ## Conclusion
 
