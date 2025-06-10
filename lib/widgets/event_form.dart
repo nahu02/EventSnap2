@@ -4,13 +4,9 @@ import 'package:intl/intl.dart';
 
 class EventForm extends StatefulWidget {
   final EventModel initialEvent;
-  final void Function(EventModel)? onChanged; // Added onChanged callback
+  final void Function(EventModel)? onChanged;
 
-  const EventForm({
-    super.key,
-    required this.initialEvent,
-    this.onChanged, // Added to constructor
-  });
+  const EventForm({super.key, required this.initialEvent, this.onChanged});
 
   @override
   EventFormState createState() => EventFormState();
@@ -63,7 +59,6 @@ class EventFormState extends State<EventForm> {
     _endDateTime = event.endDateTime;
   }
 
-  // Method to notify parent about changes
   void _notifyParentOfChanges() {
     if (widget.onChanged != null) {
       widget.onChanged!(getCurrentEventModel());
@@ -72,8 +67,8 @@ class EventFormState extends State<EventForm> {
 
   // Handler for text controller changes
   void _handleTextChange() {
-    _clearErrors(); // Clear errors on text change
-    _notifyParentOfChanges(); // Notify parent
+    _clearErrors();
+    _notifyParentOfChanges();
   }
 
   void _clearErrors() {
@@ -86,10 +81,13 @@ class EventFormState extends State<EventForm> {
   }
 
   Future<void> _selectDate(BuildContext context, bool isStartDate) async {
-    final DateTime initialDate = isStartDate ? _startDateTime : _endDateTime;
+    // Convert stored UTC DateTime to local for the date picker
+    final DateTime initialPickerDate =
+        (isStartDate ? _startDateTime : _endDateTime).toLocal();
+
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: initialDate,
+      initialDate: initialPickerDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(2101),
     );
@@ -97,80 +95,100 @@ class EventFormState extends State<EventForm> {
       if (mounted) {
         setState(() {
           if (isStartDate) {
+            final DateTime currentLocalStartTime = _startDateTime.toLocal();
+            // Create new DateTime in local, then convert to UTC for storage
             _startDateTime = DateTime(
               picked.year,
               picked.month,
               picked.day,
-              _startDateTime.hour,
-              _startDateTime.minute,
-            );
+              currentLocalStartTime.hour,
+              currentLocalStartTime.minute,
+            ).toUtc();
             if (_endDateTime.isBefore(_startDateTime)) {
               _endDateTime = _startDateTime.add(const Duration(hours: 1));
             }
           } else {
+            final DateTime currentLocalEndTime = _endDateTime.toLocal();
+            // Create new DateTime in local, then convert to UTC for storage
             _endDateTime = DateTime(
               picked.year,
               picked.month,
               picked.day,
-              _endDateTime.hour,
-              _endDateTime.minute,
-            );
+              currentLocalEndTime.hour,
+              currentLocalEndTime.minute,
+            ).toUtc();
             if (_endDateTime.isBefore(_startDateTime)) {
+              // Adjust start time if end time is now before it
               _startDateTime = _endDateTime.subtract(const Duration(hours: 1));
             }
           }
           _clearErrors();
-          _notifyParentOfChanges(); // Notify parent after date change
+          _notifyParentOfChanges();
         });
       }
     }
   }
 
   Future<void> _selectTime(BuildContext context, bool isStartDate) async {
-    final DateTime initialTime = isStartDate ? _startDateTime : _endDateTime;
+    // Convert stored UTC DateTime to local for the time picker
+    final DateTime initialPickerDateTime =
+        (isStartDate ? _startDateTime : _endDateTime).toLocal();
+    final TimeOfDay initialPickerTimeOfDay = TimeOfDay.fromDateTime(
+      initialPickerDateTime,
+    );
+
     final TimeOfDay? picked = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(initialTime),
+      initialTime: initialPickerTimeOfDay,
     );
     if (picked != null) {
       if (mounted) {
         setState(() {
           if (isStartDate) {
+            final DateTime currentLocalStartDate = _startDateTime.toLocal();
+            // Create new DateTime in local, then convert to UTC for storage
             _startDateTime = DateTime(
-              _startDateTime.year,
-              _startDateTime.month,
-              _startDateTime.day,
+              currentLocalStartDate.year,
+              currentLocalStartDate.month,
+              currentLocalStartDate.day,
               picked.hour,
               picked.minute,
-            );
+            ).toUtc();
+            // Ensure end time is after start time (comparison in UTC)
             if (_endDateTime.isBefore(_startDateTime)) {
               _endDateTime = _startDateTime.add(const Duration(hours: 1));
             }
           } else {
+            final DateTime currentLocalEndDate = _endDateTime.toLocal();
+            // Create new DateTime in local, then convert to UTC for storage
             _endDateTime = DateTime(
-              _endDateTime.year,
-              _endDateTime.month,
-              _endDateTime.day,
+              currentLocalEndDate.year,
+              currentLocalEndDate.month,
+              currentLocalEndDate.day,
               picked.hour,
               picked.minute,
-            );
+            ).toUtc();
+            // Ensure end time is after start time (comparison in UTC)
             if (_endDateTime.isBefore(_startDateTime)) {
+              // Adjust start time if end time is now before it
               _startDateTime = _endDateTime.subtract(const Duration(hours: 1));
             }
           }
           _clearErrors();
-          _notifyParentOfChanges(); // Notify parent after time change
+          _notifyParentOfChanges();
         });
       }
     }
   }
 
   String _formatDate(DateTime dateTime) {
-    return DateFormat.yMMMd().format(dateTime);
+    // Convert UTC DateTime to local before formatting
+    return DateFormat.yMMMd().format(dateTime.toLocal());
   }
 
   String _formatTime(DateTime dateTime) {
-    return DateFormat.jm().format(dateTime);
+    // Convert UTC DateTime to local before formatting
+    return DateFormat.jm().format(dateTime.toLocal());
   }
 
   String _formatDuration(Duration duration) {

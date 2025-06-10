@@ -24,6 +24,7 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
   bool _isProcessing = false;
   bool _hasText = false;
   String? _errorMessage;
+  bool _parseMultipleEvents = false;
 
   @override
   void initState() {
@@ -122,17 +123,13 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
           // Main scrollable content
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(
-                16.0,
-                16.0,
-                16.0,
-                80.0,
-              ), // Add bottom padding for footer
+              padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 80.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // Instructions
                   Card(
+                    margin: const EdgeInsets.only(bottom: 8.0),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
@@ -153,14 +150,13 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            'Paste or type any text that describes an event. For example:',
+                            'Paste or type text describing one or more events.\nFor example:',
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                           const SizedBox(height: 8),
                           Text(
                             '• "Meeting with John tomorrow at 2 PM in the conference room"\n'
-                            '• "Dentist appointment next Friday at 10:30 AM"\n'
-                            '• "Birthday party on Saturday from 6 to 10 PM at Sarah\'s house"',
+                            '• "Next Monday: Team lunch at 12, then project discussion from 3 to 4 PM."\n',
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   fontStyle: FontStyle.italic,
@@ -168,6 +164,10 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
                                     context,
                                   ).colorScheme.onSurfaceVariant,
                                 ),
+                          ),
+                          Text(
+                            'If your text contains multiple distinct events, make sure to check the checkbox below.',
+                            style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ],
                       ),
@@ -204,7 +204,24 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
                       }
                     },
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16), // Adjusted spacing
+                  // Checkbox for multiple events
+                  CheckboxListTile(
+                    title: const Text('The text contains multiple events'),
+                    value: _parseMultipleEvents,
+                    onChanged: (bool? value) {
+                      if (!_isProcessing) {
+                        // Prevent changing while processing
+                        setState(() {
+                          _parseMultipleEvents = value ?? false;
+                        });
+                      }
+                    },
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero, // Remove default padding
+                    activeColor: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(height: 16),
 
                   // Submit button
                   ElevatedButton.icon(
@@ -278,19 +295,46 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
       // Create AI service with current settings
       final aiService = OpenAiCalendarEventInterpreter(appState.settings!);
 
-      // Process the text
-      final CalendarEventProperties properties = await aiService
-          .eventToCalendarPropertiesAsync(text);
+      if (_parseMultipleEvents) {
+        // Process text for multiple events
+        final List<CalendarEventProperties> propertiesList = await aiService
+            .eventsToCalendarPropertiesAsync(text);
 
-      // Convert to EventModel
-      final event = properties.toEventModel();
+        if (propertiesList.isEmpty) {
+          if (mounted) {
+            setState(() {
+              _errorMessage = 'No events found in the provided text.';
+            });
+          }
+          return; // Early return if no events are found
+        }
 
-      // Set current event in app state
-      appState.setCurrentEvent(event);
+        // Convert to List<EventModel>
+        final events = propertiesList.map((p) => p.toEventModel()).toList();
 
-      // Navigate to event details screen
-      if (mounted) {
-        AppRouter.navigateToEventDetails(context, event: event);
+        // Set current events in app state
+        appState.setCurrentEvents(events);
+
+        // Navigate to event details screen
+        if (mounted) {
+          // No specific event to pass if multiple, EventDetailsScreen will use AppState
+          AppRouter.navigateToEventDetails(context);
+        }
+      } else {
+        // Process text for a single event
+        final CalendarEventProperties properties = await aiService
+            .eventToCalendarPropertiesAsync(text);
+
+        // Convert to EventModel
+        final event = properties.toEventModel();
+
+        // Set current event in app state
+        appState.setCurrentEvent(event);
+
+        // Navigate to event details screen
+        if (mounted) {
+          AppRouter.navigateToEventDetails(context, event: event);
+        }
       }
     } catch (e) {
       if (mounted) {

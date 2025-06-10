@@ -24,7 +24,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   String? _overallErrorMessage;
 
   // Store GlobalKeys for each EventForm
-  // Changed _EventFormState to EventFormState
   final Map<int, GlobalKey<EventFormState>> _formKeys = {};
 
   @override
@@ -38,23 +37,30 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
     List<EventModel> loadedEvents = [];
 
     if (widget.initialEvent != null) {
+      // If a single event is passed via constructor, use it.
       loadedEvents = [widget.initialEvent!];
-    } else if (appState.currentEvent != null) {
+    } else if (appState.currentEvents.isNotEmpty) {
+      // If AppStateProvider has multiple events, use them.
+      loadedEvents = List<EventModel>.from(appState.currentEvents);
+    } else if (appState.currentEvent != null &&
+        appState.currentEvents.isEmpty) {
+      // Fallback: if old currentEvent is somehow populated and new list isn\'t (should ideally not happen)
       loadedEvents = [appState.currentEvent!];
     } else {
+      // Default placeholder events if nothing is provided (for development/testing)
       final now = DateTime.now();
       loadedEvents = [
         EventModel(
-          title: 'Team Meeting',
-          description: 'Weekly team sync-up.',
-          location: 'Office A',
+          title: 'Sample Event 1',
+          description: 'This is a sample event.',
+          location: 'Sample Location A',
           startDateTime: now.add(const Duration(days: 1, hours: 10)),
           endDateTime: now.add(const Duration(days: 1, hours: 11)),
         ),
         EventModel(
-          title: 'Client Call',
-          description: 'Discuss project milestones.',
-          location: 'Zoom',
+          title: 'Sample Event 2',
+          description: 'Another sample event.',
+          location: 'Sample Location B',
           startDateTime: now.add(const Duration(days: 2, hours: 14)),
           endDateTime: now.add(const Duration(days: 2, hours: 15)),
         ),
@@ -62,9 +68,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
     }
     setState(() {
       _events = loadedEvents;
-      // Initialize GlobalKeys for each form
+      _formKeys.clear(); // Clear existing keys before repopulating
       for (int i = 0; i < _events.length; i++) {
-        // Changed _EventFormState to EventFormState
         _formKeys[i] = GlobalKey<EventFormState>();
       }
     });
