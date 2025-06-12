@@ -12,7 +12,7 @@ class AppStateProvider extends ChangeNotifier {
 
   // State variables
   Settings? _settings;
-  EventModel? _currentEvent;
+  List<EventModel> _currentEvents = []; // New list to hold multiple events
   ThemeMode _themeMode = ThemeMode.system;
   bool _isLoading = false;
   String? _errorMessage;
@@ -23,7 +23,11 @@ class AppStateProvider extends ChangeNotifier {
 
   // Getters
   Settings? get settings => _settings;
-  EventModel? get currentEvent => _currentEvent;
+  List<EventModel> get currentEvents =>
+      _currentEvents; // Getter for the list of events
+  EventModel? get currentEvent => _currentEvents.isNotEmpty
+      ? _currentEvents.first
+      : null; // Keep for compatibility if needed, or remove if fully refactored
   ThemeMode get themeMode => _themeMode;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -78,14 +82,32 @@ class AppStateProvider extends ChangeNotifier {
 
   /// Set the current event being processed
   void setCurrentEvent(EventModel? event) {
-    _currentEvent = event;
+    if (event != null) {
+      _currentEvents = [event]; // Replace list with the single event
+    } else {
+      _currentEvents = []; // Clear list if event is null
+    }
+    _clearError();
+    notifyListeners();
+  }
+
+  /// Set the current list of events being processed
+  void setCurrentEvents(List<EventModel> events) {
+    _currentEvents = events;
     _clearError();
     notifyListeners();
   }
 
   /// Clear the current event
   void clearCurrentEvent() {
-    _currentEvent = null;
+    _currentEvents = []; // Clear the list of events
+    _clearError();
+    notifyListeners();
+  }
+
+  /// Clear all current events
+  void clearCurrentEvents() {
+    _currentEvents = [];
     _clearError();
     notifyListeners();
   }

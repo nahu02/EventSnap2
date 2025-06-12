@@ -192,6 +192,172 @@ void main() {
           skip: 'Requires real API key',
         );
       });
+
+      group('Multiple Event Handling Tests', () {
+        test(
+          'processes multiple events from International Week text',
+          () async {
+            final apiKey =
+                dotenv.env['OPENAI_API_KEY'] ??
+                const String.fromEnvironment('OPENAI_API_KEY');
+
+            if (apiKey.isEmpty || apiKey == 'your_openai_api_key_here') {
+              markTestSkipped('No OpenAI API key provided');
+              return;
+            }
+
+            final settings = Settings(
+              openAiApiKey: apiKey,
+              openAiModel:
+                  'gpt-4.1-nano',
+              maxRetries: 1,
+              timeoutSeconds:
+                  60,
+            );
+            final interpreter = OpenAiCalendarEventInterpreter(settings);
+
+            final eventText = '''\
+We are excited to announce our 4th International Week event series from May 5th to May 10th! 🎊
+We have five diverse programs planned, and we hope everyone finds one that suits them perfectly. The primary goal of International Week is to create opportunities for all students at BME to connect. This event will allow you to meet new students from around the world and get to know Hungarian students as well.
+Here is the program plan of the week:
+🖼️*May 5th, 16:00*: Art Exhibition @K Ballroom
+https://www.facebook.com/events/1025436869510359
+🍷*May 5th, 19:00*: Night of Wine @K Ballroom
+https://www.facebook.com/events/1784358835459005
+💃🏼*May 6th, 17:00*: Folk Night @Baross Gábor Dormitory
+https://www.facebook.com/events/1711503172909771
+🪩*May 8th 21:00*: Party @VPK Dormitory
+https://www.facebook.com/events/1158943645913044
+🏅*May 10th 15:00*: Sport's Day @BME Sporttelep
+https://www.facebook.com/events/1348334763166427
+''';
+
+            final results = await interpreter.eventsToCalendarPropertiesAsync(
+              eventText,
+            );
+
+            expect(results, isNotNull);
+            expect(results.length, 5);
+
+            // Event 1: Art Exhibition
+            expect(results[0].summary, contains('Art Exhibition'));
+            expect(results[0].start, contains('05-05T16:00:00'));
+            expect(results[0].location, contains('K Ballroom'));
+
+            // Event 2: Night of Wine
+            expect(results[1].summary, contains('Night of Wine'));
+            expect(results[1].start, contains('05-05T19:00:00'));
+            expect(results[1].location, contains('K Ballroom'));
+
+            // Event 3: Folk Night
+            expect(results[2].summary, contains('Folk Night'));
+            expect(results[2].start, contains('05-06T17:00:00'));
+            expect(results[2].location, contains('Baross Gábor'));
+
+            // Event 4: Party
+            expect(results[3].summary, contains('Party'));
+            expect(results[3].start, contains('05-08T21:00:00'));
+            expect(results[3].location, contains('VPK Dormitory'));
+
+            // Event 5: Sport's Day
+            expect(results[4].summary, contains('Sport\'s Day'));
+            expect(results[4].start, contains('05-10T15:00:00'));
+            expect(results[4].location, contains('BME Sporttelep'));
+          },
+          skip: 'Requires real API key and multi-event capable model',
+        );
+
+        test(
+          'processes multiple events from Fair of Wonders schedule',
+          () async {
+            final apiKey =
+                dotenv.env['OPENAI_API_KEY'] ??
+                const String.fromEnvironment('OPENAI_API_KEY');
+
+            if (apiKey.isEmpty || apiKey == 'your_openai_api_key_here') {
+              markTestSkipped('No OpenAI API key provided');
+              return;
+            }
+
+            final settings = Settings(
+              openAiApiKey: apiKey,
+              openAiModel: 'gpt-4.1-nano',
+              maxRetries: 1,
+              timeoutSeconds: 60,
+            );
+            final interpreter = OpenAiCalendarEventInterpreter(settings);
+
+            final eventText = '''\
+Fair of Wonders – One-Day Schedule
+
+Morning
+- 9:00 AM: Fair Opens & Welcome Parade  
+- 10:00 AM: Opening Ceremony (Main Stage) 
+- 11:45 AM: Local Band Performance (Main Stage)
+
+Afternoon
+- 12:30 PM: Food Trucks Open (Food Court) 
+- 2:00 PM: Cooking Demonstration (Culinary Tent)  
+- 4:00 PM: Art Contest Judging (Art Pavilion)
+
+Evening
+- 5:00 PM: Sunset Stroll & Lantern Lighting  
+- 7:00 PM: Fireworks Finale (Fairgrounds)  
+''';
+            final results = await interpreter.eventsToCalendarPropertiesAsync(
+              eventText,
+            );
+
+            expect(results, isNotNull);
+            // Expecting 8 events based on the provided text
+            expect(results.length, 8);
+
+            // Event 1: Fair Opens & Welcome Parade
+            expect(
+              results[0].summary,
+              isNotNull,
+            ); // e.g., contains('Fair Opens') or similar
+            expect(results[0].start, contains('T09:00:00'));
+            // Location might not be specified for this one or could be general like "Fairgrounds"
+
+            // Event 2: Opening Ceremony
+            expect(results[1].summary, contains('Opening'));
+            expect(results[1].start, contains('T10:00:00'));
+            expect(results[1].location, contains('Main Stage'));
+
+            // Event 3: Local Band Performance
+            expect(results[2].summary, contains('Band'));
+            expect(results[2].start, contains('T11:45:00'));
+            expect(results[2].location, contains('Main Stage'));
+
+            // Event 4: Food Trucks Open
+            expect(results[3].summary, contains('Food Truck'));
+            expect(results[3].start, contains('T12:30:00'));
+            expect(results[3].location, contains('Food Court'));
+
+            // Event 5: Cooking Demonstration
+            expect(results[4].summary, contains('Cooking'));
+            expect(results[4].start, contains('T14:00:00'));
+            expect(results[4].location, contains('Culinary Tent'));
+
+            // Event 6: Art Contest Judging
+            expect(results[5].summary, contains('Art Contest'));
+            expect(results[5].start, contains('T16:00:00'));
+            expect(results[5].location, contains('Art Pavilion'));
+
+            // Event 7: Sunset Stroll & Lantern Lighting
+            expect(results[6].summary, contains('Sunset'));
+            expect(results[6].start, contains('T17:00:00'));
+            // Location might not be specified or could be general
+
+            // Event 8: Fireworks Finale
+            expect(results[7].summary, contains('Fireworks'));
+            expect(results[7].start, contains('T19:00:00'));
+            expect(results[7].location, contains('Fairgrounds'));
+          },
+          skip: 'Requires real API key and multi-event capable model',
+        );
+      });
     });
   });
 }

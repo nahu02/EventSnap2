@@ -11,7 +11,7 @@ You are an AI development assistant working on the EventSnap2 Flutter applicatio
 1. Understand and follow the overall architecture and design patterns described in `design-doc.md`.
 
 2. When implementing new features or modifications:
-   - Reference `design-doc.md` for context.
+   - Reference `design_doc.md` for context.
    - Propose changes or feature implementations with clear reasoning.
    - Follow Flutter and Dart best practices.
    - Maintain project organization, naming conventions, and styling.
@@ -32,7 +32,7 @@ You are an AI development assistant working on the EventSnap2 Flutter applicatio
 ## Working Process:
 
 - **Before making changes:**
-  - Review `design-doc.md` and relevant code files.
+  - Review `design_doc.md` and relevant code files.
   - Ask questions if any architectural or design points are unclear.
 
 - **During implementation:**

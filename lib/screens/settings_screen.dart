@@ -577,7 +577,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                                 model,
                                                 overflow: TextOverflow.ellipsis,
                                               ),
-                                              if (model == 'gpt-4.1')
+                                              if (model == 'gpt-4.1-nano' ||
+                                                  model == 'gpt-4.1-mini')
                                                 Container(
                                                   margin: const EdgeInsets.only(
                                                     left: 8.0,
@@ -710,7 +711,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             leading: Icon(Icons.psychology),
                             title: Text('AI Model Information'),
                             subtitle: Text(
-                              'gpt-4.1 provides the best accuracy for event extraction',
+                              'gpt-4.1-mini and nano provide good accuracy for event extraction',
                             ),
                             contentPadding: EdgeInsets.zero,
                           ),

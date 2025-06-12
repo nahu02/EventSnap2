@@ -23,4 +23,14 @@ abstract class CalendarEventInterpreter {
   Future<CalendarEventProperties> eventToCalendarPropertiesAsync(
     String eventText,
   );
+
+  /// Converts natural language text into a list of structured calendar event properties
+  ///
+  /// Takes a [eventText] string containing natural language description of one or more events
+  /// and returns a list of [CalendarEventProperties] objects with extracted event details.
+  ///
+  /// May throw exceptions for network errors, API errors, or parsing failures.
+  Future<List<CalendarEventProperties>> eventsToCalendarPropertiesAsync(
+    String eventText,
+  );
 }

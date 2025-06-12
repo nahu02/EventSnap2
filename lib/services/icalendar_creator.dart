@@ -15,55 +15,74 @@ import 'package:flutter/foundation.dart';
 class ICalendarCreator implements CalendarCreator {
   @override
   Future<String> createIcalFile(CalendarEventProperties properties) async {
-    // Validate input properties
-    final validationErrors = properties.validate();
-    if (validationErrors.isNotEmpty) {
-      throw ArgumentError(
-        'Invalid calendar event properties: ${validationErrors.join(', ')}',
-      );
+    // This method will now call the new method that handles a list of properties.
+    // For backward compatibility, it wraps the single property in a list.
+    return createIcalFileWithMultipleEvents([properties]);
+  }
+
+  /// Creates an iCalendar (.ics) file from a list of calendar event properties
+  ///
+  /// Takes a list of [propertiesList] containing event data for multiple events
+  /// and returns the absolute file path to the generated .ics file.
+  @override
+  Future<String> createIcalFileWithMultipleEvents(
+    List<CalendarEventProperties> propertiesList,
+  ) async {
+    if (propertiesList.isEmpty) {
+      throw ArgumentError('Properties list cannot be empty.');
     }
 
     try {
       // Create the calendar container
       final calendar = ICalendar();
 
-      // Parse start and end times
-      final DateTime startDateTime;
-      final DateTime endDateTime;
+      for (final properties in propertiesList) {
+        // Validate input properties
+        final validationErrors = properties.validate();
+        if (validationErrors.isNotEmpty) {
+          throw ArgumentError(
+            'Invalid calendar event properties: ${validationErrors.join(', ')} for event "${properties.summary ?? 'Unnamed Event'}"',
+          );
+        }
 
-      if (properties.start != null) {
-        startDateTime = DateTime.parse(properties.start!);
-      } else {
-        throw ArgumentError('Start time is required for calendar events');
+        // Parse start and end times
+        final DateTime startDateTime;
+        final DateTime endDateTime;
+
+        if (properties.start != null) {
+          startDateTime = DateTime.parse(properties.start!);
+        } else {
+          throw ArgumentError('Start time is required for calendar events');
+        }
+
+        if (properties.end != null) {
+          endDateTime = DateTime.parse(properties.end!);
+        } else {
+          // Default to 1 hour after start time if no end time provided
+          endDateTime = startDateTime.add(const Duration(hours: 1));
+        }
+
+        // Generate unique UID for the event
+        final uid = _generateUniqueUid();
+
+        // Create the event
+        final event = IEvent(
+          summary: properties.summary ?? 'Untitled Event',
+          description: properties.description,
+          location: properties.location,
+          start: startDateTime,
+          end: endDateTime,
+          uid: uid,
+          status: IEventStatus.CONFIRMED,
+        );
+
+        // Add the event to the calendar
+        calendar.addElement(event);
       }
-
-      if (properties.end != null) {
-        endDateTime = DateTime.parse(properties.end!);
-      } else {
-        // Default to 1 hour after start time if no end time provided
-        endDateTime = startDateTime.add(const Duration(hours: 1));
-      }
-
-      // Generate unique UID for the event
-      final uid = _generateUniqueUid();
-
-      // Create the event
-      final event = IEvent(
-        summary: properties.summary ?? 'Untitled Event',
-        description: properties.description,
-        location: properties.location,
-        start: startDateTime,
-        end: endDateTime,
-        uid: uid,
-        status: IEventStatus.CONFIRMED,
-      );
-
-      // Add the event to the calendar
-      calendar.addElement(event);
 
       // Get the temporary directory for saving the file
       final tempDir = await getTemporaryDirectory();
-      final fileName = 'event_${DateTime.now().millisecondsSinceEpoch}.ics';
+      final fileName = 'events_${DateTime.now().millisecondsSinceEpoch}.ics';
       final filePath = '${tempDir.path}/$fileName';
 
       // Serialize the calendar to iCalendar format
