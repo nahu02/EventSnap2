@@ -497,8 +497,8 @@ class OpenAiCalendarEventInterpreter implements CalendarEventInterpreter {
         },
         {
           "Summary": "Dentist appointment",
-          "Description": null,
-          "Location": null,
+          "Description": "",
+          "Location": "",
           "Start": _formatDateTimeWithTimezone(event2StartTime),
           "End": _formatDateTimeWithTimezone(event2EndTime),
         },
