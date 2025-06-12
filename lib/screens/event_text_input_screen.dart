@@ -225,6 +225,7 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
 
                   // Submit button
                   ElevatedButton.icon(
+                    key: const Key('create_event_button'),
                     onPressed: _isProcessing || !_hasText
                         ? null
                         : () => _processEventText(appState),
@@ -310,10 +311,10 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
         }
 
         // Convert to List<EventModel>
-        final events = propertiesList.map((p) => p.toEventModel()).toList();
+        final eventsList = propertiesList.map((p) => p.toEventModel()).toList();
 
         // Set current events in app state
-        appState.setCurrentEvents(events);
+        appState.setCurrentEvents(eventsList); // Used eventsList here
 
         // Navigate to event details screen
         if (mounted) {
