@@ -1,0 +1,56 @@
+name: 'Compare Pubspec Versions on PR'
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check-version:
+    name: 'Verify pubspec.yaml version is getting bumped on PR'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 'Checkout PR Branch'
+        uses: actions/checkout@v4
+
+      - name: 'Checkout main Branch'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main # Checkout 'main' branch into a 'main' directory
+
+      - name: 'Check if pubspec.yaml exists'
+        run: |
+          if [ ! -f ./pubspec.yaml ]; then
+            echo "❌ pubspec.yaml not found in PR branch"
+            exit 1
+          fi
+          if [ ! -f ./main/pubspec.yaml ]; then
+            echo "❌ pubspec.yaml not found in main branch"
+            exit 1
+          fi
+
+      - name: 'Read PR Version'
+        id: pr_version
+        uses: NiklasLehnfeld/flutter-version-number-action@v2
+        with:
+          file-path: ./pubspec.yaml # Path in the PR branch
+
+      - name: 'Read main Version'
+        id: main_version
+        uses: NiklasLehnfeld/flutter-version-number-action@v2
+        with:
+          file-path: ./main/pubspec.yaml # Path to the main branch's file
+
+      - name: 'Compare Versions'
+        run: |
+          echo "Main branch version: ${{ steps.main_version.outputs.version-number }}"
+          echo "PR branch version: ${{ steps.pr_version.outputs.version-number }}"
+
+          if dpkg --compare-versions "${{ steps.pr_version.outputs.version-number }}" gt "${{ steps.main_version.outputs.version-number }}"; then
+            echo "✅ Version check passed: ${{ steps.pr_version.outputs.version-number }} > ${{ steps.main_version.outputs.version-number }}"
+          else
+            echo "❌ Version check failed: PR version (${{ steps.pr_version.outputs.version-number }}) must be greater than main branch version (${{ steps.main_version.outputs.version-number }})."
+            exit 1
+          fi
