@@ -204,7 +204,6 @@ class _EventTextInputScreenState extends State<EventTextInputScreen> {
                       }
                     },
                   ),
-                  const SizedBox(height: 16), // Adjusted spacing
                   // Checkbox for multiple events
                   CheckboxListTile(
                     title: const Text('The text contains multiple events'),

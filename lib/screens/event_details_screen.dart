@@ -5,7 +5,7 @@ import 'package:event_snap_2/services/icalendar_creator.dart';
 import 'package:event_snap_2/widgets/event_form.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:event_snap_2/models/calendar_event_properties.dart'; // Added import
+import 'package:event_snap_2/models/calendar_event_properties.dart';
 
 class EventDetailsScreen extends StatefulWidget {
   // If a single event is passed, it will be shown directly.
@@ -185,33 +185,24 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => AppRouter.goBack(context),
         ),
-        // Removed Share All button from AppBar actions
-        // actions: [
-        //   if (_events.length > 1)
-        //     IconButton(
-        //       icon: const Icon(Icons.share),
-        //       tooltip: 'Share All Events',
-        //       onPressed: _isLoading ? null : _handleShareAllEvents,
-        //     ),
-        // ],
       ),
       body: _buildBody(),
-      // Add a bottom navigation bar for the "Add All to Calendar" button
-      bottomNavigationBar: _events.length > 1 && !_isLoading
+      // Add a bottom navigation bar for the "Add to Calendar" button
+      bottomNavigationBar: _events.isNotEmpty && !_isLoading
           ? Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.calendar_today_outlined),
-                label: const Text('Add All to Calendar'),
-                onPressed: _handleShareAllEvents,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                ),
-              ),
-            )
-          : null, // Show nothing if only one event or loading
+          padding: const EdgeInsets.all(16.0),
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.calendar_today_outlined),
+            label: Text(_events.length > 1 ? 'Add All to Calendar' : 'Add to Calendar'),
+            onPressed: _handleShareAllEvents,
+            style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+            ),
+          ),
+        )
+          : null, // Show nothing if no event or loading
     );
   }
 
@@ -274,7 +265,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 0.0),
           child: ExpansionTile(
-            maintainState: true, // Add this line
+            maintainState: true,
             leading: const Icon(
               Icons.event_note,
             ), // Or use ExpansionTileController for custom arrow
@@ -289,7 +280,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
               EventForm(
                 key: _formKeys[index],
                 initialEvent:
-                    _events[index], // Pass the event from the _events list
+                    _events[index],
                 onChanged: (updatedEvent) {
                   if (mounted) {
                     setState(() {
