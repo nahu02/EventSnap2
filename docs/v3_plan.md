@@ -303,6 +303,25 @@ Shared rules for every agent:
 - Commit your work in your worktree (several focused commits are fine). Commit messages: imperative subject line; end with the attribution trailer given in your brief. Do **not** push.
 - If a contract is insufficient, implement the smallest compatible addition (new optional parameter / new member), and report it explicitly in your final summary.
 
+Shared files in Phase 2 (the orchestrator resolves merges; keep edits minimal and additive):
+- `lib/main.dart` — **only F edits it**. B and C do not wire their implementations; report the class + constructor and the orchestrator swaps `LegacyAiServiceFactory` / `TextOnlySharedContentSource` / `UnsupportedImageInputService` during integration.
+- `lib/services/services.dart` (barrel) — update only the export lines for files you add/delete.
+- `test/screens/screens_smoke_test.dart` — update only the group for your own screen if your change breaks it (F owns the Home group, D the Review group, E the Settings group).
+- `test/helpers/fakes.dart`, `test/helpers/test_app.dart` — do not modify; subclass or add your own helper file next to your tests. Additive changes only if unavoidable (report them).
+- `pubspec.yaml` — B removes `dart_openai`; E may add `package_info_plus` (latest). Nobody else changes deps.
+
+## 6.0 Shared UI conventions (D, E, F)
+
+Three agents build UI in parallel; these rules keep the app coherent.
+- **Components (M3)**: one primary action per screen as `FilledButton` (or `FilledButton.icon`); secondary `OutlinedButton`/`TextButton`; destructive actions use `colorScheme.error`. Cards: `Card.filled` for content groups, `Card.outlined` for inputs/sections; radius from theme (12). Use `ListTile`s for settings rows, `SegmentedButton` for 2–3 way choices, `Switch` (via `SwitchListTile`) for booleans, `FilterChip` for filters, `InputChip`/`Chip` for attachments and badges, `Badge`/small `Chip` for capability tags.
+- **Layout**: 16 px horizontal page padding; spacing scale 4/8/12/16/24/32; section headers `textTheme.titleSmall` in `colorScheme.primary`; max content width 640 (center on tablets). Primary bottom actions in a `SafeArea` bottom bar that stays above the keyboard.
+- **Colour**: only `Theme.of(context).colorScheme` roles — never `Colors.*` literals. Status mapping: success → `primary` / `primaryContainer`; warning / "check this" → `tertiary` / `tertiaryContainer`; error → `error` / `errorContainer`. Verify light and dark.
+- **Typography**: `textTheme` styles only; no fixed heights around text; must not overflow at `textScaler` 2.0.
+- **Copy**: sentence case ("Find events", "Add to calendar", "Choose model"); short; no exclamation marks except success snackbars; provider-aware wording (never hard-code "OpenAI" outside provider-specific copy). Dates via `intl` locale-aware formats.
+- **Feedback**: floating `SnackBar`s for transient results (with Undo/Action where useful); inline banners (`MaterialBanner`-like cards) for persistent problems; every icon-only button has a `tooltip`.
+- **Icons**: Material `Icons.*` outlined variants where available (`Icons.event_outlined`, `Icons.photo_outlined`, `Icons.content_paste`, `Icons.auto_awesome`, `Icons.format_quote`, `Icons.info_outline`).
+- Shared reusable error UI lives in `lib/ui/error_presentation.dart` (F). D and E must not depend on it during Phase 2 (it doesn't exist yet in their worktrees); the orchestrator may unify later.
+
 ## 6. Workstream specs
 
 ### 6.A Foundation (Phase 1)
