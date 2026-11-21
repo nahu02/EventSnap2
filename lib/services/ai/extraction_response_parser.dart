@@ -218,12 +218,28 @@ class ExtractionResponseParser {
     final allDay =
         allDayFlag == true || (start.dateOnly && (end == null || end.dateOnly));
 
-    final DateTime startTime;
-    final DateTime endTime;
+    DateTime startTime;
+    DateTime endTime;
     if (allDay) {
       (startTime, endTime) = _allDayRange(start, end, evidence);
     } else {
       (startTime, endTime) = _timedRange(start, end, evidence);
+    }
+    final shift = weekdayCorrection(
+      startTime,
+      evidence[EventField.start]?.quote,
+    );
+    if (shift != 0) {
+      startTime = _addDays(startTime, shift);
+      endTime = _addDays(endTime, shift);
+      final weekday = _weekdayNames[startTime.weekday - 1];
+      evidence[EventField.start] = FieldEvidence(
+        quote: evidence[EventField.start]?.quote,
+        reasoning:
+            'Moved to the ${_capitalize(weekday)} named in the source '
+            '(the model returned a different weekday).',
+        confidence: EvidenceConfidence.medium,
+      );
     }
 
     return EventModel(
@@ -328,6 +344,57 @@ class ExtractionResponseParser {
     return (startTime, endTime);
   }
 
+  static const List<String> _weekdayNames = [
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
+    'sunday',
+  ];
+  static final RegExp _weekdayPattern = RegExp(
+    r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)s?\b',
+  );
+  static final RegExp _explicitDatePattern = RegExp(
+    r'\d{1,2}(st|nd|rd|th)\b|\d{1,2}\s*[./-]\s*\d{1,2}|\d{4}|'
+    r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b',
+  );
+
+  /// Days to move [start] so it falls on the weekday its evidence [quote]
+  /// names, or 0. Safety net for cheap models that mis-resolve "next Friday"
+  /// (seen live: a Saturday a week out). Applies only when the quote names
+  /// exactly one English weekday and no explicit date; moves to the nearest
+  /// such day (at most 3 days either way).
+  static int weekdayCorrection(DateTime start, String? quote) {
+    if (quote == null) return 0;
+    final lower = quote.toLowerCase();
+    if (_explicitDatePattern.hasMatch(lower)) return 0;
+    final named = _weekdayPattern
+        .allMatches(lower)
+        .map((m) => m.group(1)!)
+        .toSet();
+    if (named.length != 1) return 0;
+    final target = _weekdayNames.indexOf(named.single) + 1;
+    var delta = (target - start.weekday) % 7;
+    if (delta > 3) delta -= 7;
+    return delta;
+  }
+
+  static DateTime _addDays(DateTime d, int days) => DateTime(
+    d.year,
+    d.month,
+    d.day + days,
+    d.hour,
+    d.minute,
+    d.second,
+    d.millisecond,
+    d.microsecond,
+  );
+
+  static String _capitalize(String s) =>
+      s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+
   Map<EventField, FieldEvidence> _evidence(Map<String, Object?> json) {
     final result = <EventField, FieldEvidence>{};
     final raw = _lookup(json, _evidenceKeys);
@@ -336,7 +403,10 @@ class ExtractionResponseParser {
     for (final field in EventField.values) {
       final value = _lookup(map, _fieldKeys[field]!);
       if (value is Map) {
-        result[field] = FieldEvidence.fromJson(_normalizedKeys(value));
+        final evidence = _normalizedKeys(value);
+        // Models without structured output sometimes write "null" as text.
+        evidence['quote'] = _string(evidence['quote']);
+        result[field] = FieldEvidence.fromJson(evidence);
       } else if (value is String && value.trim().isNotEmpty) {
         result[field] = FieldEvidence(
           reasoning: value.trim(),

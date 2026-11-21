@@ -45,8 +45,9 @@ class ExtractionPrompt {
       )
       ..writeln('- Time zone: $zone')
       ..writeln(
-        '- Date lookup table. Use it to resolve weekdays and relative dates; '
-        'never compute weekdays yourself:',
+        '- Date lookup table. Resolve weekdays and relative dates by finding '
+        'the matching line (e.g. "next Friday" -> the line labelled "next '
+        'Friday"); never compute dates or weekdays yourself:',
       );
     for (final line in dateTable(local)) {
       buffer.writeln('  $line');
@@ -60,7 +61,8 @@ class ExtractionPrompt {
         'return {"events": []}.',
       )
       ..writeln(
-        '2. title: short and specific, in the language of the source. '
+        '2. title: short and specific like a calendar entry (e.g. "Dinner '
+        'with Anna"), in the language of the source. '
         'description: useful extra details from the source (agenda, people, '
         'links, booking or ticket numbers) in the source language, or null. '
         'location: only if stated, else null. Never invent details.',
@@ -68,16 +70,18 @@ class ExtractionPrompt {
       ..writeln(
         '3. Dates: resolve relative expressions ("tomorrow", "next Friday", '
         '"in two weeks") with the lookup table. A weekday on its own, "this '
-        '<weekday>" or "next <weekday>" means the first such day after today '
-        'unless the text clearly says otherwise. A date without a year is '
-        'its next occurrence (today or later).',
+        '<weekday>" or "next <weekday>" means the line labelled "next '
+        '<weekday>" (the first such day after today) unless the text clearly '
+        'says otherwise. A date without a year is its next occurrence (today '
+        'or later).',
       )
       ..writeln(
         "4. Times: write start and end as the user's local wall-clock time "
         'with the offset, e.g. $example. If the source names another time '
         "zone, convert to the user's time zone. Vague times: morning 09:00, "
         'noon 12:00, afternoon 14:00, evening 18:00, night 20:00. If there '
-        'is no end, end = start + 1 hour.',
+        'is no end, end = start + 1 hour and its evidence has quote null and '
+        'confidence "low".',
       )
       ..writeln(
         '5. All-day events: dates without a time for things that naturally '
@@ -93,8 +97,9 @@ class ExtractionPrompt {
         'spelling and case; for images, the text as printed); null if the '
         'value was inferred or defaulted, or the field is null.\n'
         '   - reasoning: one short English sentence on how the value was '
-        "derived, e.g. \"'next Friday' is Friday ${_nextFriday(local)} in "
-        'the lookup table."\n'
+        'derived. For a relative date in start or end, name the lookup line '
+        "you used, e.g. \"'next Friday' -> Friday ${_nextFriday(local)} = "
+        'next Friday."\n'
         '   - confidence: "high" if stated explicitly, "medium" if inferred '
         'from clear context, "low" if guessed or defaulted.',
       )
@@ -135,19 +140,26 @@ class ExtractionPrompt {
     return parts.join('\n\n');
   }
 
-  /// `Saturday 2026-11-21 = today`, `Sunday 2026-11-22 = tomorrow`,
-  /// `Monday 2026-11-23`, … for [lookupDays] days.
+  /// One line per day for [lookupDays] days, labelled with the phrases a
+  /// cheap model would otherwise get wrong (seen live: "next Friday" asked on
+  /// a Saturday resolved to the following Saturday):
+  /// `Saturday 2026-11-21 = today`, `Sunday 2026-11-22 = tomorrow = next
+  /// Sunday`, … `Friday 2026-11-27 = next Friday`, … `Friday 2026-12-04 =
+  /// Friday after next`, then unlabelled days.
   static List<String> dateTable(DateTime now, {int days = lookupDays}) {
     return [
       for (var i = 0; i < days; i++)
         () {
           final day = DateTime(now.year, now.month, now.day + i);
-          final label = switch (i) {
-            0 => ' = today',
-            1 => ' = tomorrow',
-            _ => '',
-          };
-          return '${weekdayName(day)} ${isoDate(day)}$label';
+          final name = weekdayName(day);
+          final labels = [
+            if (i == 0) 'today',
+            if (i == 1) 'tomorrow',
+            if (i >= 1 && i <= 7) 'next $name',
+            if (i >= 8 && i <= 14) '$name after next',
+          ];
+          final suffix = labels.isEmpty ? '' : ' = ${labels.join(' = ')}';
+          return '$name ${isoDate(day)}$suffix';
         }(),
     ];
   }

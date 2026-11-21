@@ -14,9 +14,12 @@ void main() {
       final table = ExtractionPrompt.dateTable(saturday);
       expect(table, hasLength(ExtractionPrompt.lookupDays));
       expect(table[0], 'Saturday 2026-11-21 = today');
-      expect(table[1], 'Sunday 2026-11-22 = tomorrow');
-      expect(table, contains('Friday 2026-11-27'));
-      expect(table, contains('Tuesday 2026-12-01'));
+      expect(table[1], 'Sunday 2026-11-22 = tomorrow = next Sunday');
+      expect(table, contains('Friday 2026-11-27 = next Friday'));
+      expect(table, contains('Saturday 2026-11-28 = next Saturday'));
+      expect(table, contains('Tuesday 2026-12-01 = Tuesday after next'));
+      expect(table, contains('Friday 2026-12-04 = Friday after next'));
+      expect(table, contains('Sunday 2026-12-06'));
       expect(table.last, 'Friday 2026-12-11');
     });
 
@@ -25,6 +28,9 @@ void main() {
         final parts = line.split(' ');
         final date = DateTime.parse(parts[1]);
         expect(parts[0], ExtractionPrompt.weekdayName(date), reason: line);
+        if (line.contains('next ') || line.contains('after next')) {
+          expect(line, contains(parts[0]), reason: line);
+        }
       }
     });
   });
@@ -38,7 +44,7 @@ void main() {
       final offset = ExtractionPrompt.formatOffset(saturday.timeZoneOffset);
       expect(prompt, contains('Now: Saturday 2026-11-21 14:05'));
       expect(prompt, contains('UTC offset $offset'));
-      expect(prompt, contains('Friday 2026-11-27'));
+      expect(prompt, contains('Friday 2026-11-27 = next Friday'));
       expect(prompt, contains('2026-11-21T19:00:00$offset'));
       expect(prompt, contains('all_day'));
       expect(prompt, contains('inclusive'));

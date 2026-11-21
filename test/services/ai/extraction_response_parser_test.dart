@@ -352,6 +352,72 @@ void main() {
       expect(e.evidence, isEmpty);
     });
 
+    test('a "null" quote string is treated as no quote (seen live)', () {
+      final e = parse([
+        event(
+          evidence: {
+            'title': wireEvidence('null'),
+            'start': wireEvidence(' N/A '),
+          },
+        ),
+      ]).events.single;
+      expect(e.evidence[EventField.title]?.quote, isNull);
+      expect(e.evidence[EventField.start]?.quote, isNull);
+      expect(e.evidence[EventField.title]?.confidence, EvidenceConfidence.high);
+    });
+
+    group('weekday safety net', () {
+      test('moves a mis-resolved "next Friday" to the Friday (seen live)', () {
+        // Saturday 2026-11-28 returned for "next Friday" asked on Saturday
+        // 2026-11-21; the correct day is Friday 2026-11-27.
+        final e = parse([
+          event(
+            start: '2026-11-28T19:00:00+01:00',
+            end: '2026-11-28T21:00:00+01:00',
+            evidence: {'start': wireEvidence('next Friday at 7pm')},
+          ),
+        ]).events.single;
+        expect(e.startDateTime, DateTime(2026, 11, 27, 19));
+        expect(e.endDateTime, DateTime(2026, 11, 27, 21));
+        final evidence = e.evidence[EventField.start]!;
+        expect(evidence.quote, 'next Friday at 7pm');
+        expect(evidence.confidence, EvidenceConfidence.medium);
+        expect(evidence.reasoning, contains('Friday'));
+      });
+
+      test('moves all-day events by whole days', () {
+        final e = parse([
+          event(
+            start: '2026-11-26',
+            end: '2026-11-26',
+            allDay: true,
+            evidence: {'start': wireEvidence('on Friday')},
+          ),
+        ]).events.single;
+        expect(e.startDateTime, DateTime(2026, 11, 27));
+        expect(e.endDateTime, DateTime(2026, 11, 28));
+      });
+
+      test('leaves matching, explicit or ambiguous quotes alone', () {
+        final friday = DateTime(2026, 11, 27, 19);
+        final saturday = DateTime(2026, 11, 28, 19);
+        int shift(DateTime d, String? q) =>
+            ExtractionResponseParser.weekdayCorrection(d, q);
+        expect(shift(friday, 'next Friday at 7pm'), 0);
+        expect(shift(saturday, 'Friday, 5 December'), 0);
+        expect(shift(saturday, 'Friday 28/11'), 0);
+        expect(shift(saturday, 'Friday the 28th'), 0);
+        expect(shift(saturday, 'Friday or Saturday'), 0);
+        expect(shift(saturday, 'tomorrow at 7'), 0);
+        expect(shift(saturday, null), 0);
+        expect(shift(saturday, 'Fridays at 7pm'), -1);
+        expect(shift(DateTime(2026, 11, 26), 'FRIDAY'), 1);
+        // Never more than three days either way.
+        expect(shift(DateTime(2026, 11, 23), 'Friday'), -3);
+        expect(shift(DateTime(2026, 11, 24), 'Friday'), 3);
+      });
+    });
+
     test('a bad event is skipped with a warning; others are kept', () {
       final result = parse({
         'events': [
