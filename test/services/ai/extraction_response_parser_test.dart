@@ -251,6 +251,42 @@ void main() {
       expect(evidence.confidence, EvidenceConfidence.low);
     });
 
+    Map<String, dynamic> ev(String? quote, String confidence) => {
+      'quote': quote,
+      'reasoning': 'r',
+      'confidence': confidence,
+    };
+
+    test('an end that repeats the start quote with +1 h becomes low', () {
+      final e = parse([
+        event(
+          end: '2026-12-03T19:00:00+01:00',
+          evidence: {
+            'start': ev('tomorrow at 6pm', 'high'),
+            'end': ev('Tomorrow at 6pm ', 'high'),
+          },
+        ),
+      ]).events.single;
+      final evidence = e.evidence[EventField.end]!;
+      expect(evidence.quote, isNull);
+      expect(evidence.confidence, EvidenceConfidence.low);
+      expect(e.evidence[EventField.start]!.confidence, EvidenceConfidence.high);
+    });
+
+    test('a stated one-hour end keeps its confidence', () {
+      final e = parse([
+        event(
+          end: '2026-12-03T19:00:00+01:00',
+          evidence: {
+            'start': ev('6pm', 'high'),
+            'end': ev('until 7pm', 'high'),
+          },
+        ),
+      ]).events.single;
+      expect(e.evidence[EventField.end]!.confidence, EvidenceConfidence.high);
+      expect(e.evidence[EventField.end]!.quote, 'until 7pm');
+    });
+
     test('an end earlier on the same day crosses midnight', () {
       final e = parse([
         event(

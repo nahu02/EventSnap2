@@ -242,6 +242,8 @@ class ExtractionResponseParser {
       );
     }
 
+    _downgradeDefaultedEnd(evidence, startTime, endTime, allDay: allDay);
+
     return EventModel(
       title: title ?? untitled,
       description: description,
@@ -379,6 +381,32 @@ class ExtractionResponseParser {
     var delta = (target - start.weekday) % 7;
     if (delta > 3) delta -= 7;
     return delta;
+  }
+
+  /// Models often justify a defaulted end ("no end given → +1 h") with the
+  /// start's quote and "high" confidence. An end that merely repeats the
+  /// start quote with exactly one hour of duration is an assumption, so it
+  /// is marked low confidence (shown as "Check" on the review screen).
+  static void _downgradeDefaultedEnd(
+    Map<EventField, FieldEvidence> evidence,
+    DateTime start,
+    DateTime end, {
+    required bool allDay,
+  }) {
+    if (allDay || end.difference(start) != const Duration(hours: 1)) return;
+    final endEvidence = evidence[EventField.end];
+    if (endEvidence == null ||
+        endEvidence.confidence == EvidenceConfidence.low) {
+      return;
+    }
+    final startQuote = evidence[EventField.start]?.quote?.trim().toLowerCase();
+    final endQuote = endEvidence.quote?.trim().toLowerCase();
+    if (endQuote != null && endQuote != startQuote) return;
+    evidence[EventField.end] = FieldEvidence(
+      quote: null,
+      reasoning: 'No end time given; assumed a 1-hour event.',
+      confidence: EvidenceConfidence.low,
+    );
   }
 
   static DateTime _addDays(DateTime d, int days) => DateTime(

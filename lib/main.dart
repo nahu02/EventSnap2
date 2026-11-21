@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import 'navigation/app_router.dart';
 import 'providers/app_state_provider.dart';
 import 'services/ai/ai_service_factory.dart';
-import 'services/ai/legacy/legacy_ai_service_factory.dart';
+import 'services/ai/default_ai_service_factory.dart';
 import 'services/calendar/calendar_creator.dart';
 import 'services/calendar/icalendar_creator.dart';
 import 'services/platform/android_shared_content_source.dart';
@@ -49,7 +49,7 @@ class EventSnapApp extends StatelessWidget {
           create: (_) => settingsService ?? SecureSettingsService(),
         ),
         Provider<AiServiceFactory>(
-          create: (_) => aiServiceFactory ?? LegacyAiServiceFactory(),
+          create: (_) => aiServiceFactory ?? DefaultAiServiceFactory(),
         ),
         Provider<SharedContentSource>(
           create: (_) => sharedContentSource ?? AndroidSharedContentSource(),
