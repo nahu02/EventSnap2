@@ -79,3 +79,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // EXIF orientation of images shared into the app (SharedImageProcessor).
+    implementation("androidx.exifinterface:exifinterface:1.4.2")
+}
