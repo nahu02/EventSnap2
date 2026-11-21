@@ -491,6 +491,57 @@ void main() {
     });
   });
 
+  group('freshness and de-duplication', () {
+    test('resolveProfile refetches a stale persisted catalog', () async {
+      final recording = opperServer();
+      await catalogFor(recording).listModels(AiProvider.opper, apiKey: '');
+      expect(recording.requests, hasLength(1));
+
+      now = now.add(const Duration(days: 3));
+      final restarted = catalogFor(recording);
+      final profile = await restarted.resolveProfile(
+        AiProvider.opper,
+        'openai/gpt-5-mini',
+        apiKey: '',
+      );
+      expect(recording.requests, hasLength(2));
+      expect(profile, isNotNull);
+    });
+
+    test('resolveProfile keeps the stale catalog when the refetch fails', () async {
+      final fresh = await catalogFor(opperServer())
+          .listModels(AiProvider.opper, apiKey: '');
+      expect(fresh, isNotEmpty);
+      now = now.add(const Duration(days: 3));
+      final offline = RecordingClient(
+        (_, _) async => throw http.ClientException('offline'),
+      );
+      final profile = await catalogFor(offline).resolveProfile(
+        AiProvider.opper,
+        'openai/gpt-5-mini',
+        apiKey: '',
+      );
+      expect(offline.requests, isNotEmpty);
+      expect(profile.supportsVision, isTrue);
+    });
+
+    test('concurrent fetches for different keys are not merged', () async {
+      final recording = RecordingClient(
+        (_, _) async => jsonResponse(openAiList(['gpt-5-mini'])),
+      );
+      final catalog = catalogFor(recording);
+      await Future.wait([
+        catalog.listModels(AiProvider.openai, apiKey: 'sk-aaaaaaaaaaaaaaaa'),
+        catalog.listModels(AiProvider.openai, apiKey: 'sk-bbbbbbbbbbbbbbbb'),
+      ]);
+      expect(recording.requests, hasLength(2));
+      final auth = recording.requests
+          .map((r) => r.headers['Authorization'])
+          .toSet();
+      expect(auth, hasLength(2));
+    });
+  });
+
   group('helpers', () {
     test('keyFingerprint is stable, short and key-dependent', () {
       final a = DefaultModelCatalog.keyFingerprint('sk-abc');

@@ -174,7 +174,7 @@ class DefaultModelCatalog implements ModelCatalog, ModelProfileResolver {
   final Duration cacheTtl;
 
   final Map<AiProvider, _Snapshot> _memory = {};
-  final Map<AiProvider, Future<_Snapshot>> _inFlight = {};
+  final Map<(AiProvider, String), Future<_Snapshot>> _inFlight = {};
   final Map<AiProvider, Future<void>> _persistedLoads = {};
   final Map<String, CatalogEntry?> _singleModels = {};
 
@@ -280,7 +280,25 @@ class DefaultModelCatalog implements ModelCatalog, ModelProfileResolver {
         return ModelHeuristics.guessProfile(provider, id);
       }
       await _loadPersisted(provider);
-      final snapshot = _memory[provider];
+      var snapshot = _memory[provider];
+      final config = ProviderConfig.of(provider);
+      final key = apiKey.trim();
+      final fingerprint = config.modelListRequiresKey
+          ? keyFingerprint(key)
+          : '';
+      final usable = snapshot != null &&
+          snapshot.fingerprint == fingerprint &&
+          _isFresh(snapshot);
+      if (snapshot != null &&
+          !usable &&
+          !(config.modelListRequiresKey && key.isEmpty)) {
+        // Stale (or other account's) catalog: refetch, best effort.
+        try {
+          snapshot = await _fetchDeduplicated(provider, key, fingerprint);
+        } catch (_) {
+          // Keep using the stale snapshot.
+        }
+      }
       final cached = snapshot == null
           ? null
           : _match(snapshot.entries, id, (e) => e.info.id);
@@ -319,12 +337,13 @@ class DefaultModelCatalog implements ModelCatalog, ModelProfileResolver {
     String key,
     String fingerprint,
   ) {
-    final running = _inFlight[provider];
+    final id = (provider, fingerprint);
+    final running = _inFlight[id];
     if (running != null) return running;
     final future = _fetch(provider, key, fingerprint).whenComplete(() {
-      _inFlight.remove(provider);
+      _inFlight.remove(id);
     });
-    _inFlight[provider] = future;
+    _inFlight[id] = future;
     return future;
   }
 

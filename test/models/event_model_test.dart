@@ -569,4 +569,20 @@ void main() {
       );
     });
   });
+
+  test('copyWith can clear description and location', () {
+    final event = EventModel(
+      title: 'Party',
+      description: 'Bring snacks',
+      location: 'Home',
+      startDateTime: DateTime(2026, 1, 1, 10),
+      endDateTime: DateTime(2026, 1, 1, 11),
+    );
+    expect(event.copyWith(title: 'x').description, 'Bring snacks');
+    final cleared = event.copyWith(clearDescription: true, clearLocation: true);
+    expect(cleared.description, isNull);
+    expect(cleared.location, isNull);
+    expect(cleared.id, event.id);
+    expect(event.copyWith(clearLocation: true).description, 'Bring snacks');
+  });
 }

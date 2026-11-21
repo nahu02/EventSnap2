@@ -117,6 +117,9 @@ class EventModel {
   }
 
   /// Creates a copy with optional field updates. The [id] is preserved.
+  ///
+  /// [clearDescription] / [clearLocation] reset those fields to null (they
+  /// win over a given value).
   EventModel copyWith({
     String? title,
     String? description,
@@ -125,12 +128,14 @@ class EventModel {
     DateTime? endDateTime,
     bool? isAllDay,
     Map<EventField, FieldEvidence>? evidence,
+    bool clearDescription = false,
+    bool clearLocation = false,
   }) {
     return EventModel(
       id: id,
       title: title ?? this.title,
-      description: description ?? this.description,
-      location: location ?? this.location,
+      description: clearDescription ? null : description ?? this.description,
+      location: clearLocation ? null : location ?? this.location,
       startDateTime: startDateTime ?? this.startDateTime,
       endDateTime: endDateTime ?? this.endDateTime,
       isAllDay: isAllDay ?? this.isAllDay,
