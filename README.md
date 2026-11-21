@@ -10,7 +10,7 @@ EventSnap2 is a Flutter mobile app that turns natural language text, and photos 
 
 **Download Pre-built APK:**
 1. Go to the [Releases](https://github.com/nahu02/EventSnap2/releases) section of this repository
-2. Download the APK file from the v3.0.0 release (or the most recent release)
+2. Download the APK file from the most recent release
 3. Enable "Install from Unknown Sources" in your Android settings:
    - Go to Settings > Security > Unknown Sources (or Settings > Apps > Special Access > Install Unknown Apps)
    - Allow installation from your browser or file manager
