@@ -1,898 +1,756 @@
-import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
+import 'dart:math' as math;
 
+import 'package:material_ui/material_ui.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
+
+import '../models/ai_model_info.dart';
 import '../models/ai_provider.dart';
 import '../models/settings.dart';
 import '../providers/app_state_provider.dart';
 import '../services/ai/ai_exceptions.dart';
 import '../services/ai/ai_service_factory.dart';
+import '../services/ai/model_catalog.dart';
+import '../widgets/settings/api_key_field.dart';
+import '../widgets/settings/external_links.dart';
+import '../widgets/settings/model_display.dart';
+import '../widgets/settings/model_picker.dart';
+import '../widgets/settings/selected_model_tile.dart';
+import '../widgets/settings/settings_section.dart';
 
-/// Settings screen for API key configuration and app preferences
+/// App settings: provider, API key, model, sharing, appearance, advanced
+/// request options and about.
 ///
-/// TEMPORARY v2 layout (OpenAI only) adapted to Settings v2; workstream E
-/// replaces it with the multi-provider settings + model picker. Saving keeps
-/// all settings fields this screen does not edit.
+/// Persistence model: **auto-save**. Every change is written immediately via
+/// [AppStateProvider.updateSettings]; API key typing is debounced
+/// ([keySaveDelay]) and flushed when the field loses focus, before verifying
+/// or picking a model, and when the screen is closed, so nothing is lost on
+/// back navigation. Saves are serialised and always write the latest state;
+/// failures keep the edit and offer a retry.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  /// How long API key typing must pause before the key is saved.
+  static const keySaveDelay = Duration(milliseconds: 700);
+
+  /// Project page shown in the About section.
+  static final sourceCodeUrl = Uri.parse(
+    'https://github.com/nahu02/EventSnap2',
+  );
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
+enum _KeyCheckStatus { checking, valid, invalid }
+
+/// Result of verifying [key] (only shown while the field still holds it).
+class _KeyCheck {
+  const _KeyCheck(this.key, this.status, [this.message]);
+
+  final String key;
+  final _KeyCheckStatus status;
+  final String? message;
+}
+
+typedef _ModelRef = ({AiProvider provider, String id});
+
+/// Catalog lookup of the selected model's capabilities.
+class _ModelLookup {
+  _ModelLookup({required this.apiKey, this.loading = true, this.info});
+
+  /// Key the lookup ran with (OpenAI model lists depend on it).
+  final String apiKey;
+  final bool loading;
+  final AiModelInfo? info;
+}
+
 class _SettingsScreenState extends State<SettingsScreen> {
-  // Form controllers
-  final _formKey = GlobalKey<FormState>();
-  final _apiKeyController = TextEditingController();
+  late final AppStateProvider _appState;
+  late final ModelCatalog _catalog;
+  late final Future<String?> _version;
 
-  // State variables
-  String _selectedModel = AiProvider.openai.defaultModel;
-  int _maxRetries = Settings.defaultMaxRetries;
-  int _timeoutSeconds = Settings.defaultTimeoutSeconds;
-  bool _debugMode = false;
-  bool _obscureApiKey = true;
-  bool _isLoading = false;
-  bool _isLoadingModels = false;
-  String? _errorMessage;
-  String? _successMessage;
-  String? _modelLoadError;
+  /// Local edits not yet confirmed as saved; `null` when in sync.
+  Settings? _pending;
+  Timer? _keySaveTimer;
+  bool _saving = false;
+  bool _saveAgain = false;
+  bool _disposed = false;
 
-  // Track the actual API key for show/hide functionality
-  String _actualApiKey = '';
-  bool _isShowingSavedKey = false;
+  final Map<AiProvider, _KeyCheck> _keyChecks = {};
+  final Map<_ModelRef, _ModelLookup> _lookups = {};
 
-  // Available OpenAI models (fetched dynamically)
-  List<String> _availableModels = [
-    'gpt-5-mini',
-    'gpt-5',
-    'gpt-4.1-mini',
-    'gpt-4.1',
-  ]; // Default fallback models
+  Settings get _settings => _pending ?? _appState.settings;
 
-  static const int _minTimeoutSlider = 10;
-  static const int _maxTimeoutSlider = 180;
-  static const int _maxRetriesSlider = 5;
+  bool get _alive => mounted && !_disposed;
 
   @override
   void initState() {
     super.initState();
-    _loadCurrentSettings();
+    _appState = context.read<AppStateProvider>();
+    _catalog = context.read<AiServiceFactory>().modelCatalog;
+    _version = _loadVersion();
+    _appState.addListener(_onAppStateChanged);
+    if (_appState.isInitialized) _ensureModelInfo();
   }
 
   @override
   void dispose() {
-    _apiKeyController.dispose();
+    _disposed = true;
+    _appState.removeListener(_onAppStateChanged);
+    _keySaveTimer?.cancel();
+    if (_pending != null) unawaited(_persist());
     super.dispose();
   }
 
-  /// Load current settings from the app state
-  void _loadCurrentSettings() {
-    final appState = context.read<AppStateProvider>();
-    final settings = appState.settings;
-
-    {
-      setState(() {
-        _actualApiKey = settings.openAiApiKey;
-        _isShowingSavedKey = settings.openAiApiKey.isNotEmpty;
-
-        // Show masked version for saved keys, empty for no key
-        _apiKeyController.text = settings.openAiApiKey.isNotEmpty
-            ? '•' *
-                  20 // Show masked version
-            : '';
-        _selectedModel = settings.openAiModel;
-        if (!_availableModels.contains(_selectedModel)) {
-          _availableModels = [_selectedModel, ..._availableModels];
-        }
-        _maxRetries = settings.maxRetries;
-        _timeoutSeconds = settings.timeoutSeconds;
-        _debugMode = settings.debugMode;
-        // Set obscure to false when showing masked version, true when empty
-        _obscureApiKey = settings.openAiApiKey.isEmpty;
-      });
-
-      // Fetch available models if API key is available
-      if (settings.openAiApiKey.isNotEmpty) {
-        _fetchAvailableModels();
-      }
-    }
-  }
-
-  /// Toggle API key visibility - handles both saved and new keys
-  void _toggleApiKeyVisibility() {
-    setState(() {
-      if (_isShowingSavedKey) {
-        // For saved keys: toggle between masked and actual key
-        if (_apiKeyController.text.startsWith('•')) {
-          // Currently showing masked, switch to actual key
-          _apiKeyController.text = _actualApiKey;
-          _obscureApiKey = false;
-        } else {
-          // Currently showing actual key, switch to masked
-          _apiKeyController.text = '•' * 20;
-          _obscureApiKey = false;
-        }
-      } else {
-        // For new/empty keys: just toggle obscureText
-        _obscureApiKey = !_obscureApiKey;
-      }
-    });
-  }
-
-  /// Clear messages
-  void _clearMessages() {
-    setState(() {
-      _errorMessage = null;
-      _successMessage = null;
-    });
-  }
-
-  /// Show error message
-  void _showError(String message) {
-    setState(() {
-      _errorMessage = message;
-      _successMessage = null;
-    });
-  }
-
-  /// Show success message
-  void _showSuccess(String message) {
-    setState(() {
-      _successMessage = message;
-      _errorMessage = null;
-    });
-  }
-
-  /// Fetch available OpenAI models dynamically
-  Future<void> _fetchAvailableModels() async {
-    final appState = context.read<AppStateProvider>();
-    final settings = appState.settings;
-    final catalog = context.read<AiServiceFactory>().modelCatalog;
-
-    if (settings.openAiApiKey.isEmpty) {
-      setState(() {
-        _modelLoadError = 'API key required to fetch models';
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoadingModels = true;
-      _modelLoadError = null;
-    });
-
+  static Future<String?> _loadVersion() async {
     try {
-      final models = await catalog.listModels(
-        AiProvider.openai,
-        apiKey: settings.openAiApiKey,
-      );
-      final gptModels = models.map((m) => m.id).toList();
-      if (!mounted) return;
-
-      if (gptModels.isNotEmpty) {
-        setState(() {
-          _availableModels = gptModels;
-          // Update selected model if it's not in the new list
-          // Keep the user's current model selectable
-          if (!_availableModels.contains(_selectedModel)) {
-            _availableModels = [_selectedModel, ..._availableModels];
-          }
-        });
-      } else {
-        setState(() {
-          _modelLoadError = 'No GPT models found in your OpenAI account';
-        });
-      }
-    } on AiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _modelLoadError = 'Failed to fetch models: ${e.userMessage}';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingModels = false;
-        });
-      }
-    }
-  }
-
-  /// Validate API key format
-  String? _validateApiKey(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'API key is required';
-    }
-
-    // Don't validate if it's the masked version
-    if (value.startsWith('•')) {
+      final info = await PackageInfo.fromPlatform();
+      final version = info.version.trim();
+      if (version.isEmpty) return null;
+      final build = info.buildNumber.trim();
+      return (build.isEmpty || build == version)
+          ? version
+          : '$version ($build)';
+    } catch (_) {
       return null;
     }
-
-    if (!value.startsWith('sk-')) {
-      return 'API key must start with "sk-"';
-    }
-
-    if (value.length < 20) {
-      return 'API key appears to be too short';
-    }
-
-    return null;
   }
 
-  /// Save settings
-  Future<void> _saveSettings() async {
-    if (!_formKey.currentState!.validate()) {
+  void _onAppStateChanged() {
+    if (_alive) _ensureModelInfo();
+  }
+
+  // --- Persistence -----------------------------------------------------------
+
+  /// Applies [change] locally and (unless [persist] is false) saves it.
+  void _apply(
+    Settings Function(Settings current) change, {
+    bool persist = true,
+  }) {
+    final before = _settings;
+    final next = change(before);
+    if (next != before) {
+      setState(() => _pending = next);
+      if (next.provider != before.provider ||
+          next.activeModel != before.activeModel) {
+        _ensureModelInfo();
+      }
+    }
+    // Also persists edits applied earlier without saving (slider drags).
+    if (persist && _pending != null) unawaited(_persist());
+  }
+
+  /// Saves the latest local edits; concurrent calls coalesce.
+  Future<void> _persist() async {
+    _keySaveTimer?.cancel();
+    if (_saving) {
+      _saveAgain = true;
       return;
     }
+    _saving = true;
+    try {
+      do {
+        _saveAgain = false;
+        final target = _pending;
+        if (target == null) break;
+        if (target != _appState.settings) {
+          try {
+            await _appState.updateSettings(target);
+          } catch (_) {
+            _showSaveError();
+            break;
+          }
+        }
+        if (_pending == target) {
+          if (_alive) {
+            setState(() => _pending = null);
+          } else {
+            _pending = null;
+          }
+        }
+      } while (_saveAgain);
+    } finally {
+      _saving = false;
+    }
+  }
 
-    _clearMessages();
+  /// Saves a debounced API key right away.
+  void _flushPendingKey() {
+    if (_keySaveTimer?.isActive ?? false) unawaited(_persist());
+  }
+
+  void _showSaveError() {
+    if (!_alive) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: const Text("Couldn't save your changes"),
+          action: SnackBarAction(label: 'Retry', onPressed: _persist),
+        ),
+      );
+  }
+
+  // --- Actions -----------------------------------------------------------------
+
+  void _onApiKeyChanged(String key) {
+    _apply((s) => s.copyWithApiKey(s.provider, key), persist: false);
+    _keySaveTimer?.cancel();
+    _keySaveTimer = Timer(SettingsScreen.keySaveDelay, () {
+      unawaited(_persist());
+    });
+  }
+
+  Future<void> _verifyKey() async {
+    final settings = _settings;
+    final provider = settings.provider;
+    final key = settings.activeApiKey;
+    if (key.isEmpty) return;
+    _flushPendingKey();
     setState(() {
-      _isLoading = true;
+      _keyChecks[provider] = _KeyCheck(key, _KeyCheckStatus.checking);
     });
 
+    _KeyCheck result;
     try {
-      final appState = context.read<AppStateProvider>();
-      final currentSettings = appState.settings;
-
-      // Use existing API key if user didn't change it (masked version)
-      String apiKey = _apiKeyController.text;
-      if (apiKey.startsWith('•')) {
-        apiKey = currentSettings.openAiApiKey;
-      }
-
-      // Create new settings (keeps fields this screen does not edit)
-      final newSettings = currentSettings.copyWith(
-        provider: AiProvider.openai,
-        openAiApiKey: apiKey.trim(),
-        openAiModel: _selectedModel,
-        maxRetries: _maxRetries,
-        timeoutSeconds: _timeoutSeconds,
-        debugMode: _debugMode,
+      await _catalog.verifyApiKey(provider, key);
+      result = _KeyCheck(key, _KeyCheckStatus.valid);
+    } on AiException catch (e) {
+      result = _KeyCheck(
+        key,
+        _KeyCheckStatus.invalid,
+        _verifyError(provider, e),
       );
-
-      // Check if API key changed to refresh models
-      final apiKeyChanged =
-          !apiKey.startsWith('•') && apiKey != currentSettings.openAiApiKey;
-
-      // Update settings through app state
-      await appState.updateSettings(newSettings);
-
-      _showSuccess('Settings saved successfully!');
-
-      // Refresh the masked display
-      _loadCurrentSettings();
-
-      // Fetch models if API key was updated
-      if (apiKeyChanged && newSettings.openAiApiKey.isNotEmpty) {
-        _fetchAvailableModels();
-      }
-    } catch (e) {
-      _showError('Failed to save settings: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+    } catch (_) {
+      result = _KeyCheck(
+        key,
+        _KeyCheckStatus.invalid,
+        AiException.userMessageFor(AiErrorKind.unknown),
+      );
     }
+    if (!_alive || _keyChecks[provider]?.key != key) return;
+    setState(() => _keyChecks[provider] = result);
   }
 
-  /// Reset settings to defaults
-  Future<void> _resetToDefaults() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reset Settings'),
-        content: const Text(
-          'Are you sure you want to reset all settings to their default values? This will clear your API key.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Reset'),
-          ),
-        ],
-      ),
+  static String _verifyError(AiProvider provider, AiException e) {
+    return switch (e.kind) {
+      AiErrorKind.auth =>
+        '${provider.displayName} rejected this key. Check that you copied '
+            'all of it.',
+      AiErrorKind.notConfigured => 'Enter an API key first.',
+      _ => e.userMessage,
+    };
+  }
+
+  Future<void> _chooseModel() async {
+    final settings = _settings;
+    final provider = settings.provider;
+    _flushPendingKey();
+    final picked = await showModelPicker(
+      context,
+      catalog: _catalog,
+      provider: provider,
+      apiKey: settings.activeApiKey,
+      selectedModelId: settings.activeModel,
     );
-
-    if (confirmed == true) {
-      setState(() {
-        _apiKeyController.text = '';
-        _selectedModel = AiProvider.openai.defaultModel;
-        _maxRetries = Settings.defaultMaxRetries;
-        _timeoutSeconds = Settings.defaultTimeoutSeconds;
-        _debugMode = false;
-        _obscureApiKey = true;
-        _actualApiKey = '';
-        _isShowingSavedKey = false;
-      });
-
-      _clearMessages();
-    }
+    if (picked == null || !_alive) return;
+    _lookups[(provider: provider, id: picked.id)] = _ModelLookup(
+      apiKey: settings.activeApiKey,
+      loading: false,
+      info: picked,
+    );
+    _apply((s) => s.copyWithModel(provider, picked.id));
   }
 
-  /// Open OpenAI API documentation
-  Future<void> _openApiDocumentation() async {
-    final uri = AiProvider.openai.apiKeyHelpUrl;
+  // --- Model capabilities ------------------------------------------------------
 
+  /// Looks up the selected model's metadata unless already known. Unknown
+  /// results are retried once the API key changes.
+  void _ensureModelInfo() {
+    final settings = _settings;
+    final id = settings.activeModel.trim();
+    if (id.isEmpty) return;
+    final ref = (provider: settings.provider, id: id);
+    final apiKey = settings.activeApiKey;
+    final existing = _lookups[ref];
+    if (existing != null &&
+        (existing.loading ||
+            existing.info != null ||
+            existing.apiKey == apiKey)) {
+      return;
+    }
+    final lookup = _ModelLookup(apiKey: apiKey);
+    _lookups[ref] = lookup;
+    unawaited(_runLookup(ref, lookup));
+  }
+
+  Future<void> _runLookup(_ModelRef ref, _ModelLookup lookup) async {
+    AiModelInfo? info;
     try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (e) {
-      _showError('Error opening documentation: $e');
+      info = await _catalog.findModel(
+        ref.provider,
+        ref.id,
+        apiKey: lookup.apiKey,
+      );
+    } catch (_) {
+      info = null;
+    }
+    if (!identical(_lookups[ref], lookup)) return;
+    final done = _ModelLookup(
+      apiKey: lookup.apiKey,
+      loading: false,
+      info: info,
+    );
+    if (_alive) {
+      setState(() => _lookups[ref] = done);
+    } else {
+      _lookups[ref] = done;
     }
   }
+
+  // --- Build -------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<AppStateProvider>();
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-        actions: [
-          TextButton(onPressed: _resetToDefaults, child: const Text('Reset')),
-        ],
-      ),
-      body: Form(
-        key: _formKey,
-        child: Column(
-          children: [
-            // Messages section
-            if (_errorMessage != null || _successMessage != null)
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.all(16.0),
-                padding: const EdgeInsets.all(12.0),
-                decoration: BoxDecoration(
-                  color: _errorMessage != null
-                      ? Theme.of(context).colorScheme.errorContainer
-                      : Theme.of(context).colorScheme.secondaryContainer,
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _errorMessage != null ? Icons.error : Icons.check_circle,
-                      color: _errorMessage != null
-                          ? Theme.of(context).colorScheme.onErrorContainer
-                          : Theme.of(context).colorScheme.onSecondaryContainer,
-                    ),
-                    const SizedBox(width: 8.0),
-                    Expanded(
-                      child: Text(
-                        _errorMessage ?? _successMessage ?? '',
-                        style: TextStyle(
-                          color: _errorMessage != null
-                              ? Theme.of(context).colorScheme.onErrorContainer
-                              : Theme.of(context)
-                                    .colorScheme
-                                    .onSecondaryContainer,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: _clearMessages,
-                      iconSize: 20.0,
-                    ),
-                  ],
-                ),
-              ),
-
-            // Main content
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(16.0),
-                children: [
-                  // App info section
-                  Consumer<AppStateProvider>(
-                    builder: (context, appState, child) {
-                      return Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'App Information',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              const SizedBox(height: 16),
-
-                              ListTile(
-                                leading: Icon(
-                                  appState.isConfigured
-                                      ? Icons.check_circle
-                                      : Icons.warning,
-                                  color: appState.isConfigured
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(context).colorScheme.error,
-                                ),
-                                title: Text(
-                                  appState.isConfigured
-                                      ? 'App Configured'
-                                      : 'Setup Required',
-                                ),
-                                subtitle: Text(
-                                  appState.isConfigured
-                                      ? 'Ready to process events'
-                                      : 'Please configure your OpenAI API key',
-                                ),
-                                contentPadding: EdgeInsets.zero,
-                              ),
-
-                              const Divider(),
-
-                              ListTile(
-                                leading: const Icon(Icons.brightness_6),
-                                title: const Text('Theme'),
-                                subtitle: Text(
-                                  _getThemeModeText(appState.themeMode),
-                                ),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.brightness_4),
-                                  tooltip: 'Change theme',
-                                  onPressed: () => _cycleTheme(appState),
-                                ),
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+      appBar: AppBar(title: const Text('Settings')),
+      body: !appState.isInitialized
+          ? const Center(child: CircularProgressIndicator())
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final gutter = math.max(16.0, (constraints.maxWidth - 640) / 2);
+                final settings = _settings;
+                return SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    gutter,
+                    0,
+                    gutter,
+                    32 + MediaQuery.paddingOf(context).bottom,
                   ),
-
-                  const SizedBox(height: 16),
-
-                  // OpenAI Configuration section
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'OpenAI Configuration',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 16),
-
-                          // API Key field
-                          TextFormField(
-                            controller: _apiKeyController,
-                            decoration: InputDecoration(
-                              labelText: 'API Key',
-                              hintText: 'sk-...',
-                              prefixIcon: const Icon(Icons.key),
-                              suffixIcon: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: Icon(
-                                      _obscureApiKey ||
-                                              (_isShowingSavedKey &&
-                                                  _apiKeyController.text
-                                                      .startsWith('•'))
-                                          ? Icons.visibility
-                                          : Icons.visibility_off,
-                                    ),
-                                    onPressed: _toggleApiKeyVisibility,
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.help_outline),
-                                    onPressed: _openApiDocumentation,
-                                  ),
-                                ],
-                              ),
-                              border: const OutlineInputBorder(),
-                              helperText:
-                                  'Your OpenAI API key (stored securely)',
-                            ),
-                            obscureText: _obscureApiKey,
-                            validator: _validateApiKey,
-                            onChanged: (value) {
-                              _clearMessages();
-                              // If user starts typing and we were showing a saved key, reset state
-                              if (_isShowingSavedKey &&
-                                  !value.startsWith('•')) {
-                                setState(() {
-                                  _isShowingSavedKey = false;
-                                  _actualApiKey = '';
-                                  _obscureApiKey = true;
-                                });
-                              }
-                            },
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // Model selection with loading state
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: DropdownButtonFormField<String>(
-                                      initialValue:
-                                          _availableModels.contains(
-                                            _selectedModel,
-                                          )
-                                          ? _selectedModel
-                                          : null,
-                                      decoration: InputDecoration(
-                                        labelText: 'AI Model',
-                                        prefixIcon: _isLoadingModels
-                                            ? const SizedBox(
-                                                width: 20,
-                                                height: 20,
-                                                child: Padding(
-                                                  padding: EdgeInsets.all(8.0),
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                      ),
-                                                ),
-                                              )
-                                            : const Icon(Icons.psychology),
-                                        border: const OutlineInputBorder(),
-                                        helperText: _isLoadingModels
-                                            ? 'Loading available models...'
-                                            : 'OpenAI model to use for event extraction',
-                                      ),
-                                      items: _availableModels.map((model) {
-                                        return DropdownMenuItem(
-                                          value: model,
-                                          child: Row(
-                                            children: [
-                                              Text(
-                                                model,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                              if (model ==
-                                                  AiProvider
-                                                      .openai
-                                                      .defaultModel)
-                                                Container(
-                                                  margin: const EdgeInsets.only(
-                                                    left: 8.0,
-                                                  ),
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 6.0,
-                                                        vertical: 2.0,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .primary,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          4.0,
-                                                        ),
-                                                  ),
-                                                  child: Text(
-                                                    'Recommended',
-                                                    style: TextStyle(
-                                                      color: Theme.of(context)
-                                                          .colorScheme
-                                                          .onPrimary,
-                                                      fontSize: 10.0,
-                                                    ),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                        );
-                                      }).toList(),
-                                      onChanged: _isLoadingModels
-                                          ? null
-                                          : (value) {
-                                              if (value != null) {
-                                                setState(() {
-                                                  _selectedModel = value;
-                                                });
-                                                _clearMessages();
-                                              }
-                                            },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (_modelLoadError != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8.0),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(8.0),
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .errorContainer,
-                                      borderRadius: BorderRadius.circular(4.0),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.warning,
-                                          size: 16,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onErrorContainer,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            _modelLoadError!,
-                                            style: TextStyle(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onErrorContainer,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildProviderSection(context, settings),
+                      _buildApiKeySection(context, settings),
+                      _buildModelSection(context, settings),
+                      _buildSharingSection(settings),
+                      _buildAppearanceSection(context, settings),
+                      _buildAdvancedSection(context, settings),
+                      _buildAboutSection(context, settings),
+                    ],
                   ),
-
-                  const SizedBox(height: 16),
-
-                  // Help section
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Help & Documentation',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 16),
-
-                          ListTile(
-                            leading: const Icon(Icons.key),
-                            title: const Text('How to get an OpenAI API Key'),
-                            subtitle: const Text(
-                              'Visit OpenAI Platform to create an API key',
-                            ),
-                            trailing: const Icon(Icons.open_in_new),
-                            onTap: _openApiDocumentation,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-
-                          const Divider(),
-
-                          const ListTile(
-                            leading: Icon(Icons.security),
-                            title: Text('Security & Privacy'),
-                            subtitle: Text(
-                              'Your API key is stored securely on your device',
-                            ),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-
-                          const Divider(),
-
-                          const ListTile(
-                            leading: Icon(Icons.psychology),
-                            title: Text('AI Model Information'),
-                            subtitle: Text(
-                              'gpt-5-mini provides good accuracy for event extraction',
-                            ),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Advanced Settings section
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Advanced Settings',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Max Retries
-                          Row(
-                            children: [
-                              const Icon(Icons.refresh),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Max Retries: $_maxRetries',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyLarge,
-                                    ),
-                                    const Text(
-                                      'Number of retry attempts for failed API calls',
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              SizedBox(
-                                width: 120,
-                                child: Slider(
-                                  value: _maxRetries
-                                      .clamp(0, _maxRetriesSlider)
-                                      .toDouble(),
-                                  min: 0,
-                                  max: _maxRetriesSlider.toDouble(),
-                                  divisions: _maxRetriesSlider,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _maxRetries = value.toInt();
-                                    });
-                                    _clearMessages();
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // Timeout
-                          Row(
-                            children: [
-                              const Icon(Icons.timer),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Timeout: ${_timeoutSeconds}s',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyLarge,
-                                    ),
-                                    const Text(
-                                      'Maximum time to wait for API response',
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              SizedBox(
-                                width: 120,
-                                child: Slider(
-                                  value: _timeoutSeconds
-                                      .clamp(
-                                        _minTimeoutSlider,
-                                        _maxTimeoutSlider,
-                                      )
-                                      .toDouble(),
-                                  min: _minTimeoutSlider.toDouble(),
-                                  max: _maxTimeoutSlider.toDouble(),
-                                  divisions:
-                                      (_maxTimeoutSlider - _minTimeoutSlider) ~/
-                                      10,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _timeoutSeconds = value.toInt();
-                                    });
-                                    _clearMessages();
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // Debug Mode
-                          SwitchListTile(
-                            value: _debugMode,
-                            onChanged: (value) {
-                              setState(() {
-                                _debugMode = value;
-                              });
-                              _clearMessages();
-                            },
-                            title: const Text('Debug Mode'),
-                            subtitle: const Text(
-                              'Show the raw AI response when reviewing events',
-                            ),
-                            secondary: const Icon(Icons.bug_report),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
             ),
-
-            // Bottom action bar
-            Container(
-              padding: const EdgeInsets.all(16.0),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                border: Border(
-                  top: BorderSide(
-                    color: Theme.of(context).dividerColor,
-                    width: 1.0,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _saveSettings,
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Save Settings'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
-  /// Cycles System → Light → Dark and saves immediately.
-  Future<void> _cycleTheme(AppStateProvider appState) async {
-    final next = switch (appState.settings.themeMode) {
-      AppThemeMode.system => AppThemeMode.light,
-      AppThemeMode.light => AppThemeMode.dark,
-      AppThemeMode.dark => AppThemeMode.system,
-    };
-    try {
-      await appState.updateSettings(
-        appState.settings.copyWith(themeMode: next),
-      );
-    } catch (e) {
-      _showError('Failed to change theme: $e');
-    }
+  Widget _buildProviderSection(BuildContext context, Settings settings) {
+    final theme = Theme.of(context);
+    return SettingsSection(
+      title: 'AI provider',
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SettingsSegmentedButton<AiProvider>(
+                options: [
+                  for (final p in AiProvider.values)
+                    SettingsOption(p, p.displayName),
+                ],
+                selected: settings.provider,
+                onChanged: (p) => _apply((s) => s.copyWith(provider: p)),
+              ),
+              const SizedBox(height: 12),
+              for (final p in AiProvider.values)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: '${p.displayName}: ',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        TextSpan(text: ModelLabels.providerDescription(p)),
+                      ],
+                    ),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: p == settings.provider
+                          ? theme.colorScheme.onSurface
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
-  String _getThemeModeText(ThemeMode mode) {
-    switch (mode) {
-      case ThemeMode.light:
-        return 'Light';
-      case ThemeMode.dark:
-        return 'Dark';
-      case ThemeMode.system:
-        return 'System';
-    }
+  Widget _buildApiKeySection(BuildContext context, Settings settings) {
+    final provider = settings.provider;
+    final key = settings.activeApiKey;
+    final check = _keyChecks[provider];
+    final keyWarnings = settings
+        .warnings()
+        .where((w) => w.startsWith(provider.displayName))
+        .toList();
+
+    return SettingsSection(
+      title: 'API key',
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ApiKeyField(
+                key: ValueKey(provider),
+                provider: provider,
+                initialValue: key,
+                onChanged: _onApiKeyChanged,
+                onCommit: _flushPendingKey,
+              ),
+              for (final warning in keyWarnings)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: SettingsNotice(message: warning),
+                ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed:
+                        key.isEmpty || check?.status == _KeyCheckStatus.checking
+                        ? null
+                        : _verifyKey,
+                    icon: const Icon(Icons.verified_outlined),
+                    label: const Text('Verify key'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () =>
+                        ExternalLinks.open(context, provider.apiKeyHelpUrl),
+                    icon: const Icon(Icons.open_in_new),
+                    label: const Text('Get a key'),
+                  ),
+                ],
+              ),
+              if (check != null && check.key == key)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: _KeyCheckView(check: check, provider: provider),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildModelSection(BuildContext context, Settings settings) {
+    final id = settings.activeModel.trim();
+    final lookup = _lookups[(provider: settings.provider, id: id)];
+    final info = lookup?.info;
+    final warnings = [
+      if (info?.supportsStructuredOutput == false)
+        "This model doesn't support structured output, so results may be "
+            'less reliable.',
+      if (info?.supportsVision == false)
+        "This model can't read images, so photos won't work with it.",
+    ];
+
+    return SettingsSection(
+      title: 'Model',
+      children: [
+        SelectedModelTile(
+          modelId: id,
+          info: info,
+          loading: lookup?.loading ?? false,
+          onTap: _chooseModel,
+        ),
+        if (warnings.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final (i, warning) in warnings.indexed)
+                  Padding(
+                    padding: EdgeInsets.only(top: i == 0 ? 0 : 8),
+                    child: SettingsNotice(message: warning),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSharingSection(Settings settings) {
+    return SettingsSection(
+      title: 'Sharing',
+      children: [
+        SwitchListTile(
+          secondary: const Icon(Icons.share_outlined),
+          title: const Text('Auto-process shared content'),
+          subtitle: const Text(
+            'Find events as soon as text or a photo is shared to EventSnap',
+          ),
+          value: settings.autoProcessShared,
+          onChanged: (value) =>
+              _apply((s) => s.copyWith(autoProcessShared: value)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAppearanceSection(BuildContext context, Settings settings) {
+    final theme = Theme.of(context);
+    return SettingsSection(
+      title: 'Appearance',
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Theme', style: theme.textTheme.bodyLarge),
+              const SizedBox(height: 12),
+              SettingsSegmentedButton<AppThemeMode>(
+                options: const [
+                  SettingsOption(
+                    AppThemeMode.system,
+                    'System',
+                    icon: Icons.brightness_auto_outlined,
+                  ),
+                  SettingsOption(
+                    AppThemeMode.light,
+                    'Light',
+                    icon: Icons.light_mode_outlined,
+                  ),
+                  SettingsOption(
+                    AppThemeMode.dark,
+                    'Dark',
+                    icon: Icons.dark_mode_outlined,
+                  ),
+                ],
+                selected: settings.themeMode,
+                onChanged: (mode) => _apply((s) => s.copyWith(themeMode: mode)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAdvancedSection(BuildContext context, Settings settings) {
+    final theme = Theme.of(context);
+    final structured = switch (settings.structuredOutputMode) {
+      StructuredOutputMode.auto => 'Structured output auto',
+      StructuredOutputMode.off => 'Structured output off',
+    };
+    final summary =
+        '$structured · ${_retriesLabel(settings.maxRetries)} · '
+        '${settings.timeoutSeconds} s timeout';
+
+    return SettingsSection(
+      title: 'Advanced',
+      children: [
+        ExpansionTile(
+          key: const PageStorageKey('settings_advanced'),
+          leading: const Icon(Icons.tune),
+          title: const Text('Request options and debugging'),
+          subtitle: Text(summary),
+          shape: const Border(),
+          collapsedShape: const Border(),
+          expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+          childrenPadding: const EdgeInsets.only(bottom: 8),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Structured output', style: theme.textTheme.bodyLarge),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Auto asks models that support it for schema-checked '
+                    'JSON. Turn it off if a model keeps failing.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SettingsSegmentedButton<StructuredOutputMode>(
+                    options: const [
+                      SettingsOption(StructuredOutputMode.auto, 'Auto'),
+                      SettingsOption(StructuredOutputMode.off, 'Off'),
+                    ],
+                    selected: settings.structuredOutputMode,
+                    onChanged: (mode) =>
+                        _apply((s) => s.copyWith(structuredOutputMode: mode)),
+                  ),
+                ],
+              ),
+            ),
+            SettingsSlider(
+              key: const Key('settings_max_retries'),
+              title: 'Max retries',
+              description: 'Extra attempts after network errors or timeouts',
+              value: settings.maxRetries,
+              min: Settings.minRetries,
+              max: Settings.maxRetriesLimit,
+              format: (v) => '$v',
+              onChanged: (v) =>
+                  _apply((s) => s.copyWith(maxRetries: v), persist: false),
+              onChangeEnd: (v) => _apply((s) => s.copyWith(maxRetries: v)),
+            ),
+            SettingsSlider(
+              key: const Key('settings_timeout'),
+              title: 'Timeout',
+              description: 'How long to wait for the AI to answer',
+              value: settings.timeoutSeconds,
+              min: Settings.minTimeoutSeconds,
+              max: Settings.maxTimeoutSeconds,
+              step: 5,
+              format: (v) => '$v s',
+              onChanged: (v) =>
+                  _apply((s) => s.copyWith(timeoutSeconds: v), persist: false),
+              onChangeEnd: (v) => _apply((s) => s.copyWith(timeoutSeconds: v)),
+            ),
+            SwitchListTile(
+              secondary: const Icon(Icons.bug_report_outlined),
+              title: const Text('Debug mode'),
+              subtitle: const Text(
+                'Show the raw AI response on the review screen',
+              ),
+              value: settings.debugMode,
+              onChanged: (value) => _apply((s) => s.copyWith(debugMode: value)),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static String _retriesLabel(int retries) =>
+      retries == 1 ? '1 retry' : '$retries retries';
+
+  Widget _buildAboutSection(BuildContext context, Settings settings) {
+    return SettingsSection(
+      title: 'About',
+      children: [
+        FutureBuilder<String?>(
+          future: _version,
+          builder: (context, snapshot) {
+            final version =
+                snapshot.data ??
+                (snapshot.connectionState == ConnectionState.done
+                    ? 'Unknown'
+                    : 'Loading…');
+            return ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('Version'),
+              subtitle: Text(version),
+            );
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.code),
+          title: const Text('Source code'),
+          subtitle: Text(
+            '${SettingsScreen.sourceCodeUrl.host}'
+            '${SettingsScreen.sourceCodeUrl.path}',
+          ),
+          trailing: const Icon(Icons.open_in_new),
+          onTap: () =>
+              ExternalLinks.open(context, SettingsScreen.sourceCodeUrl),
+        ),
+        ListTile(
+          leading: const Icon(Icons.privacy_tip_outlined),
+          title: const Text('Privacy'),
+          subtitle: Text(
+            'Your text and images are sent to '
+            '${settings.provider.displayName} for processing. API keys are '
+            'stored securely on this device.',
+          ),
+        ),
+        ListTile(
+          leading: const Icon(Icons.description_outlined),
+          title: const Text('Open-source licenses'),
+          onTap: () async {
+            final version = await _version;
+            if (!context.mounted) return;
+            showLicensePage(
+              context: context,
+              applicationName: 'EventSnap',
+              applicationVersion: version,
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// Inline result of an API key check.
+class _KeyCheckView extends StatelessWidget {
+  const _KeyCheckView({required this.check, required this.provider});
+
+  final _KeyCheck check;
+  final AiProvider provider;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final (Widget leading, String text, Color color) = switch (check.status) {
+      _KeyCheckStatus.checking => (
+        const SizedBox.square(
+          dimension: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        'Checking key…',
+        scheme.onSurfaceVariant,
+      ),
+      _KeyCheckStatus.valid => (
+        Icon(Icons.check_circle_outline, size: 20, color: scheme.primary),
+        'Key works with ${provider.displayName}',
+        scheme.primary,
+      ),
+      _KeyCheckStatus.invalid => (
+        Icon(Icons.error_outline, size: 20, color: scheme.error),
+        check.message ?? AiException.userMessageFor(AiErrorKind.unknown),
+        scheme.error,
+      ),
+    };
+    return Semantics(
+      liveRegion: true,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          leading,
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodyMedium?.copyWith(color: color),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
