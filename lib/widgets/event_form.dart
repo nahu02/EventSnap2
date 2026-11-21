@@ -412,15 +412,26 @@ class EventFormState extends State<EventForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
+        // Wrap: the duration chip moves below the heading when space is short
+        // (large text).
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 4,
           children: [
-            Icon(Icons.schedule_outlined, size: 20, color: cs.primary),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'When',
-                style: theme.textTheme.titleSmall?.copyWith(color: cs.primary),
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.schedule_outlined, size: 20, color: cs.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'When',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: cs.primary,
+                  ),
+                ),
+              ],
             ),
             if (!endBeforeStart)
               Chip(
