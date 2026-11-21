@@ -23,7 +23,8 @@ import java.util.concurrent.RejectedExecutionException
  *   via `onNewIntent` before that is queued and pushed right after.
  * - native → Dart `onSharedContent(payload)`: content delivered via `onNewIntent`.
  *
- * Payload: `{"text": String?, "images": [{"path": String, "mimeType": String}]}`.
+ * Payload: `{"text": String?, "images": [{"path": String, "mimeType": String}],
+ * "failedImages": Int}` (sent even when no image could be read).
  *
  * All methods must be called on the main thread; image processing runs on a
  * single background thread (so deliveries keep their order).
@@ -163,20 +164,29 @@ internal class SharedContentHandler(
                     buildPayload(data)
                 } catch (t: Throwable) {
                     Log.w(TAG, "Failed to process shared content", t)
-                    data.text?.let { mapOf("text" to it, "images" to emptyList<Any>()) }
+                    fallbackPayload(data)
                 }
             mainHandler.post { if (!released) onDone(payload) }
         }
-        if (!submitted && !released) onDone(data.text?.let { mapOf("text" to it, "images" to emptyList<Any>()) })
+        if (!submitted && !released) onDone(fallbackPayload(data))
+    }
+
+    /** Payload when processing itself failed: the text (if any) and the failed image count. */
+    private fun fallbackPayload(data: SharedIntentData): Map<String, Any?>? {
+        val failed = data.imageUris.size
+        if (data.text == null && failed == 0) return null
+        return mapOf("text" to data.text, "images" to emptyList<Any>(), "failedImages" to failed)
     }
 
     private fun buildPayload(data: SharedIntentData): Map<String, Any?>? {
         val text = data.text ?: data.textDocumentUri?.let(processor::readText)
-        val images = processor.processImages(data.imageUris).map { file ->
+        val (files, failed) = processor.processImagesCounting(data.imageUris)
+        val images = files.map { file ->
             mapOf("path" to file.absolutePath, "mimeType" to SharedImageProcessor.OUTPUT_MIME_TYPE)
         }
-        if (text == null && images.isEmpty()) return null
-        return mapOf("text" to text, "images" to images)
+        if (text == null && images.isEmpty() && failed == 0) return null
+        // Images were offered but none could be read: still report the failure.
+        return mapOf("text" to text, "images" to images, "failedImages" to failed)
     }
 
     private fun runInBackground(task: () -> Unit): Boolean =

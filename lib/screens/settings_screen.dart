@@ -76,6 +76,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Timer? _keySaveTimer;
   bool _saving = false;
   bool _saveAgain = false;
+  Future<void>? _inFlight;
+  bool _popping = false;
   bool _disposed = false;
 
   final Map<AiProvider, _KeyCheck> _keyChecks = {};
@@ -143,12 +145,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// Saves the latest local edits; concurrent calls coalesce.
-  Future<void> _persist() async {
+  ///
+  /// The returned future completes when everything pending is saved (also for
+  /// calls that coalesce into a running save).
+  Future<void> _persist() {
     _keySaveTimer?.cancel();
     if (_saving) {
       _saveAgain = true;
-      return;
+      return _inFlight ?? Future<void>.value();
     }
+    return _inFlight = _runPersist();
+  }
+
+  Future<void> _runPersist() async {
     _saving = true;
     try {
       do {
@@ -174,6 +183,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } finally {
       _saving = false;
     }
+  }
+
+  /// Saves pending edits before the route pops, so screens below (e.g. Home
+  /// auto-processing a share) see the new settings.
+  Future<void> _onPopInvoked(bool didPop, Object? result) async {
+    if (didPop || _popping) return;
+    _popping = true;
+    try {
+      await _persist();
+    } finally {
+      _popping = false;
+    }
+    if (mounted) Navigator.of(context).pop(result);
   }
 
   /// Saves a debounced API key right away.
@@ -316,36 +338,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppStateProvider>();
-    return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
-      body: !appState.isInitialized
-          ? const Center(child: CircularProgressIndicator())
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final gutter = math.max(16.0, (constraints.maxWidth - 640) / 2);
-                final settings = _settings;
-                return SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(
-                    gutter,
-                    0,
-                    gutter,
-                    32 + MediaQuery.paddingOf(context).bottom,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildProviderSection(context, settings),
-                      _buildApiKeySection(context, settings),
-                      _buildModelSection(context, settings),
-                      _buildSharingSection(settings),
-                      _buildAppearanceSection(context, settings),
-                      _buildAdvancedSection(context, settings),
-                      _buildAboutSection(context, settings),
-                    ],
-                  ),
-                );
-              },
-            ),
+    return PopScope<Object?>(
+      canPop: _pending == null,
+      onPopInvokedWithResult: _onPopInvoked,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Settings')),
+        body: !appState.isInitialized
+            ? const Center(child: CircularProgressIndicator())
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final gutter = math.max(
+                    16.0,
+                    (constraints.maxWidth - 640) / 2,
+                  );
+                  final settings = _settings;
+                  return SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(
+                      gutter,
+                      0,
+                      gutter,
+                      32 + MediaQuery.paddingOf(context).bottom,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildProviderSection(context, settings),
+                        _buildApiKeySection(context, settings),
+                        _buildModelSection(context, settings),
+                        _buildSharingSection(settings),
+                        _buildAppearanceSection(context, settings),
+                        _buildAdvancedSection(context, settings),
+                        _buildAboutSection(context, settings),
+                      ],
+                    ),
+                  );
+                },
+              ),
+      ),
     );
   }
 

@@ -167,6 +167,39 @@ void main() {
       expect(services.appState.isConfigured, isTrue);
     });
 
+    testWidgets('pop waits for pending edits to be saved', (tester) async {
+      usePhoneView(tester);
+      final services = servicesWith();
+      await services.initAppState();
+      Future<void>? popped;
+      String? keyWhenPopped;
+      await tester.pumpWidget(
+        services.wrap(
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () {
+                popped = AppRouter.openSettings(context).then((_) {
+                  keyWhenPopped = services.appState.settings.openAiApiKey;
+                });
+              },
+              child: const Text('open settings'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open settings'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(keyField(), 'sk-fresh-key-1234567');
+      await tester.pump();
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      await popped;
+
+      expect(find.byType(SettingsScreen), findsNothing);
+      expect(keyWhenPopped, 'sk-fresh-key-1234567');
+    });
+
     testWidgets('a pending key is saved when leaving the screen', (
       tester,
     ) async {

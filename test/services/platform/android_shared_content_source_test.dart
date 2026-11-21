@@ -111,7 +111,10 @@ void main() {
 
   setUp(() {
     native = FakeNativeShareSide();
-    source = AndroidSharedContentSource(isSupported: true);
+    source = AndroidSharedContentSource(
+      isSupported: true,
+      readyFallbackDelay: Duration.zero,
+    );
   });
 
   tearDown(() {
@@ -219,6 +222,87 @@ void main() {
         const SharedContent(text: 'launch share'),
       );
       await sub.cancel();
+    });
+  });
+
+  group('ready ordering', () {
+    test('ready waits for the initial take when a listener is attached '
+        'first', () async {
+      final slow = AndroidSharedContentSource(
+        isSupported: true,
+        readyFallbackDelay: const Duration(seconds: 30),
+      );
+      final sub = slow.sharedContentStream.listen((_) {});
+      await _settle();
+      expect(native.count(AndroidSharedContentSource.readyMethod), 0);
+
+      native.initialPayload = _payload(text: 'launch');
+      await slow.takeInitialSharedContent();
+      await _settle();
+      expect(native.methods, [
+        AndroidSharedContentSource.getInitialMethod,
+        AndroidSharedContentSource.readyMethod,
+      ]);
+      await sub.cancel();
+      slow.dispose();
+    });
+
+    test(
+      'a newer queued share is delivered after the initial payload',
+      () async {
+        native.initialPayload = _payload(text: 'older');
+        await native.share(_payload(text: 'newer'));
+        final received = <SharedContent>[];
+        final sub = source.sharedContentStream.listen(received.add);
+        final initial = await source.takeInitialSharedContent();
+        await _settle();
+        expect(initial, const SharedContent(text: 'older'));
+        expect(received, [const SharedContent(text: 'newer')]);
+        await sub.cancel();
+      },
+    );
+
+    test('falls back to ready when nobody takes the initial content', () async {
+      final fast = AndroidSharedContentSource(
+        isSupported: true,
+        readyFallbackDelay: const Duration(milliseconds: 20),
+      );
+      final sub = fast.sharedContentStream.listen((_) {});
+      await _settle();
+      expect(native.count(AndroidSharedContentSource.readyMethod), 0);
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(native.count(AndroidSharedContentSource.readyMethod), 1);
+      await sub.cancel();
+      fast.dispose();
+    });
+  });
+
+  group('failed images', () {
+    test('parsePayload keeps the failed count', () {
+      final content = AndroidSharedContentSource.parsePayload({
+        'text': 'hi',
+        'images': <Object?>[],
+        'failedImages': 2,
+      });
+      expect(content, const SharedContent(text: 'hi', failedImageCount: 2));
+    });
+
+    test('a payload with only failures is still delivered', () {
+      final content = AndroidSharedContentSource.parsePayload({
+        'text': null,
+        'images': <Object?>[],
+        'failedImages': 3,
+      });
+      expect(content, isNotNull);
+      expect(content!.isEmpty, isTrue);
+      expect(content.failedImageCount, 3);
+    });
+
+    test('count participates in equality', () {
+      expect(
+        const SharedContent(text: 'a', failedImageCount: 1),
+        isNot(const SharedContent(text: 'a')),
+      );
     });
   });
 

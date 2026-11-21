@@ -692,6 +692,83 @@ void main() {
     });
   });
 
+  group('settings during processing', () {
+    testWidgets('settings icon is disabled while processing', (tester) async {
+      final services = await pumpHome(tester);
+      final pending = Completer<ExtractionResult>();
+      services.interpreter.handler = (_, _) => pending.future;
+      final icon = find.widgetWithIcon(IconButton, Icons.settings_outlined);
+
+      expect(tester.widget<IconButton>(icon).onPressed, isNotNull);
+      await enterAndFind(tester, 'Lunch at 12');
+      await pumpFrames(tester);
+      expect(tester.widget<IconButton>(icon).onPressed, isNull);
+      expect(find.byTooltip('Settings'), findsOneWidget);
+
+      pending.complete(sampleResult());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('result arriving while another route is on top does not '
+        'push Review over it', (tester) async {
+      final services = await pumpHome(tester);
+      final pending = Completer<ExtractionResult>();
+      services.interpreter.handler = (_, _) => pending.future;
+      await enterAndFind(tester, 'Lunch at 12');
+      await pumpFrames(tester);
+
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      unawaited(navigator.pushNamed(AppRouter.settings));
+      await tester.pumpAndSettle();
+      expect(settingsScreen, findsOneWidget);
+
+      pending.complete(sampleResult());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(reviewScreen, findsNothing);
+      expect(find.text('Events found — tap to review'), findsOneWidget);
+
+      // Back on Home, the snackbar action opens the review.
+      navigator.pop();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Review'));
+      await tester.pumpAndSettle();
+      expect(reviewScreen, findsOneWidget);
+    });
+  });
+
+  group('failed shared images', () {
+    testWidgets('shows a snackbar when images could not be read', (
+      tester,
+    ) async {
+      final services = await pumpHome(tester);
+      services.sharedContentSource.emit(
+        const SharedContent(failedImageCount: 2),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text("Couldn't read 2 shared images"), findsOneWidget);
+      expect(services.interpreter.calls, isEmpty);
+    });
+
+    testWidgets('singular wording with partial failure', (tester) async {
+      final services = await pumpHome(
+        tester,
+        settings: configured.copyWith(autoProcessShared: false),
+      );
+      services.sharedContentSource.emit(
+        const SharedContent(text: 'Hello', failedImageCount: 1),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        find.textContaining("Couldn't read 1 shared image"),
+        findsOneWidget,
+      );
+      expect(composerText(tester), 'Hello');
+    });
+  });
+
   group('sharing', () {
     const shared = SharedContent(text: 'Concert on Saturday at 8pm');
 

@@ -73,16 +73,24 @@ internal class SharedImageProcessor(context: Context) {
     }
 
     /** Processes up to [MAX_IMAGES] images; unreadable ones are skipped. */
-    fun processImages(uris: List<Uri>): List<File> {
+    fun processImages(uris: List<Uri>): List<File> = processImagesCounting(uris).first
+
+    /**
+     * Like [processImages], also returning how many attempted images could not
+     * be read (images never attempted because of the limits are not counted).
+     */
+    fun processImagesCounting(uris: List<Uri>): Pair<List<File>, Int> {
         val results = mutableListOf<File>()
+        var failed = 0
         for ((attempt, uri) in uris.withIndex()) {
             if (results.size >= MAX_IMAGES || attempt >= MAX_ATTEMPTS) break
-            processImage(uri)?.let(results::add)
+            val file = processImage(uri)
+            if (file != null) results.add(file) else failed++
         }
         if (uris.size > results.size) {
             Log.i(TAG, "Using ${results.size} of ${uris.size} shared image(s)")
         }
-        return results
+        return results to failed
     }
 
     /** Returns the processed JPEG, or null if the URI can't be read or decoded. */

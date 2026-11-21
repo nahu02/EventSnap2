@@ -67,6 +67,10 @@ class _HomeScreenState extends State<HomeScreen> {
   AiException? _error;
   bool _noEventsFound = false;
 
+  /// A finished extraction waiting for Home to become the current route again
+  /// (it finished while another route, e.g. Settings, was on top).
+  ({ExtractionResult result, ExtractionInput input})? _pendingReview;
+
   /// Set when content was shared in; consumed by [_maybeAutoProcess] once
   /// settings are loaded and this screen is the current route.
   bool _autoProcessPending = false;
@@ -154,7 +158,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onSharedContent(SharedContent content) {
-    if (!mounted || content.isEmpty) return;
+    if (!mounted) return;
+    final failed = content.failedImageCount;
+    final failedMessage = failed > 0
+        ? "Couldn't read $failed shared ${failed == 1 ? 'image' : 'images'}"
+        : null;
+    if (content.isEmpty) {
+      if (failedMessage != null) _showSnackBar(failedMessage, floating: true);
+      return;
+    }
     final previous = _snapshot();
     _cancelProcessing();
     _setComposer(
@@ -164,7 +176,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final hadContent =
         previous.text.trim().isNotEmpty || previous.images.isNotEmpty;
     _showSnackBar(
-      'Shared content added',
+      failedMessage == null
+          ? 'Shared content added'
+          : 'Shared content added. $failedMessage',
+      floating: failedMessage != null,
       onUndo: hadContent ? () => _restoreSnapshot(previous) : null,
     );
     _autoProcessPending = true;
@@ -233,6 +248,31 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
+      // Don't push Review on top of another route (e.g. Settings).
+      _pendingReview = (result: result, input: input);
+      _showSnackBar(
+        'Events found — tap to review',
+        actionLabel: 'Review',
+        onAction: _openPendingReview,
+      );
+      return;
+    }
+    await _openReview(result, input);
+  }
+
+  Future<void> _openPendingReview() async {
+    final pending = _pendingReview;
+    if (pending == null || !mounted) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+    _pendingReview = null;
+    await _openReview(pending.result, pending.input);
+  }
+
+  Future<void> _openReview(
+    ExtractionResult result,
+    ExtractionInput input,
+  ) async {
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     final outcome = await AppRouter.openReview(context, result);
     if (!mounted) return;
@@ -285,6 +325,10 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Called when this screen is visible again after a pushed route closed.
   void _afterNavigation() {
     _checkVisionSupport();
+    if (_pendingReview != null) {
+      unawaited(_openPendingReview());
+      return;
+    }
     _maybeAutoProcess();
   }
 
@@ -448,14 +492,26 @@ class _HomeScreenState extends State<HomeScreen> {
   // ---------------------------------------------------------------------------
   // Feedback helpers
 
-  void _showSnackBar(String message, {VoidCallback? onUndo}) {
+  void _showSnackBar(
+    String message, {
+    VoidCallback? onUndo,
+    String? actionLabel,
+    VoidCallback? onAction,
+    bool floating = false,
+  }) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(message),
           persist: false,
-          action: onUndo == null
+          behavior: floating ? SnackBarBehavior.floating : null,
+          action: onAction != null
+              ? SnackBarAction(
+                  label: actionLabel ?? 'Open',
+                  onPressed: onAction,
+                )
+              : onUndo == null
               ? null
               : SnackBarAction(label: 'Undo', onPressed: onUndo),
         ),
@@ -602,7 +658,7 @@ class _HomeScreenState extends State<HomeScreen> {
             IconButton(
               icon: const Icon(Icons.settings_outlined),
               tooltip: 'Settings',
-              onPressed: _openSettings,
+              onPressed: isProcessing ? null : _openSettings,
             ),
           ],
         ),

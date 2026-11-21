@@ -5,7 +5,17 @@ class SharedContent {
   final String? text;
   final List<InputImage> images;
 
-  const SharedContent({this.text, this.images = const []});
+  /// Number of offered images that could not be read natively.
+  final int failedImageCount;
+
+  const SharedContent({
+    this.text,
+    this.images = const [],
+    this.failedImageCount = 0,
+  });
+
+  /// True when there is nothing to put in the composer (a share with only
+  /// failed images is "empty" here but still worth reporting).
 
   bool get isEmpty => (text == null || text!.trim().isEmpty) && images.isEmpty;
 
@@ -14,6 +24,7 @@ class SharedContent {
     if (identical(this, other)) return true;
     if (other is! SharedContent ||
         other.text != text ||
+        other.failedImageCount != failedImageCount ||
         other.images.length != images.length) {
       return false;
     }
@@ -24,9 +35,11 @@ class SharedContent {
   }
 
   @override
-  int get hashCode => Object.hash(text, Object.hashAll(images));
+  int get hashCode =>
+      Object.hash(text, failedImageCount, Object.hashAll(images));
 
   @override
   String toString() =>
-      'SharedContent(text: ${text?.length ?? 0} chars, images: ${images.length})';
+      'SharedContent(text: ${text?.length ?? 0} chars, images: ${images.length}, '
+      'failed: $failedImageCount)';
 }
