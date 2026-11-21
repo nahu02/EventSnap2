@@ -3,7 +3,6 @@
 // home_screen_test.dart) and may delete the cases here that they replace.
 import 'package:event_snap_2/models/models.dart';
 import 'package:event_snap_2/navigation/app_router.dart';
-import 'package:event_snap_2/screens/event_text_input_screen.dart';
 import 'package:event_snap_2/screens/home_screen.dart';
 import 'package:event_snap_2/screens/review_screen.dart';
 import 'package:event_snap_2/screens/settings_screen.dart';
@@ -25,14 +24,16 @@ void main() {
   }
 
   group('HomeScreen', () {
-    testWidgets('renders welcome and setup state', (tester) async {
+    testWidgets('renders the composer and setup state', (tester) async {
       final services = TestServices();
       await services.initAppState();
       await tester.pumpWidget(services.wrap(const HomeScreen()));
       await tester.pumpAndSettle();
 
-      expect(find.text('Welcome to EventSnap!'), findsOneWidget);
-      expect(find.text('Setup required'), findsOneWidget);
+      expect(find.text('EventSnap'), findsOneWidget);
+      expect(find.text('Finish setting up'), findsOneWidget);
+      expect(find.text('Find events'), findsOneWidget);
+      expect(find.text('Try an example'), findsOneWidget);
     });
 
     testWidgets('shows provider and model when configured', (tester) async {
@@ -41,15 +42,15 @@ void main() {
       await tester.pumpWidget(services.wrap(const HomeScreen()));
       await tester.pumpAndSettle();
 
-      expect(find.text('Ready to go!'), findsOneWidget);
+      expect(find.text('Finish setting up'), findsNothing);
       expect(find.text('OpenAI · gpt-5-mini'), findsOneWidget);
     });
 
-    testWidgets('opens the text input with initially shared text', (
+    testWidgets('fills the composer with initially shared text', (
       tester,
     ) async {
       final services = TestServices(
-        settings: configured,
+        settings: configured.copyWith(autoProcessShared: false),
         sharedContentSource: FakeSharedContentSource(
           initial: const SharedContent(text: 'Concert on Saturday at 8pm'),
         ),
@@ -58,13 +59,15 @@ void main() {
       await tester.pumpWidget(services.wrap(const HomeScreen()));
       await tester.pumpAndSettle();
 
-      expect(find.byType(EventTextInputScreen), findsOneWidget);
       expect(find.text('Concert on Saturday at 8pm'), findsOneWidget);
       expect(services.sharedContentSource.initialCalls, 1);
+      expect(services.interpreter.calls, isEmpty);
     });
 
-    testWidgets('opens the text input for live shares', (tester) async {
-      final services = TestServices(settings: configured);
+    testWidgets('fills the composer with live shares', (tester) async {
+      final services = TestServices(
+        settings: configured.copyWith(autoProcessShared: false),
+      );
       await services.initAppState();
       await tester.pumpWidget(services.wrap(const HomeScreen()));
       await tester.pumpAndSettle();
@@ -74,6 +77,53 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Lunch at noon'), findsOneWidget);
+    });
+
+    testWidgets('extracts events and opens the review screen', (tester) async {
+      useTallView(tester);
+      final services = TestServices(settings: configured);
+      services.interpreter.result = sampleResult(
+        events: [sampleEvent(title: 'Board meeting')],
+      );
+      await services.initAppState();
+      await tester.pumpWidget(services.wrap(const HomeScreen()));
+
+      await tester.enterText(
+        find.byType(TextField),
+        'Board meeting May 25 10am',
+      );
+      await tester.pump();
+      await tester.tap(find.text('Find events'));
+      await tester.pumpAndSettle();
+
+      expect(
+        services.interpreter.calls.single.text,
+        'Board meeting May 25 10am',
+      );
+      expect(services.aiServiceFactory.createdWith.single, configured);
+      expect(find.byType(ReviewScreen), findsOneWidget);
+    });
+
+    testWidgets('shows the friendly AiException message', (tester) async {
+      useTallView(tester);
+      final services = TestServices(settings: configured);
+      services.interpreter.error = const AiException(
+        AiErrorKind.auth,
+        'HTTP 401',
+        statusCode: 401,
+      );
+      await services.initAppState();
+      await tester.pumpWidget(services.wrap(const HomeScreen()));
+
+      await tester.enterText(find.byType(TextField), 'Lunch at 12');
+      await tester.pump();
+      await tester.tap(find.text('Find events'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(AiException.userMessageFor(AiErrorKind.auth)),
+        findsOneWidget,
+      );
     });
   });
 
@@ -92,94 +142,6 @@ void main() {
       await tester.pumpWidget(services.wrap(const SettingsScreen()));
       await tester.pumpAndSettle();
       expect(services.modelCatalog.listCalls, 1);
-    });
-  });
-
-  group('EventTextInputScreen', () {
-    testWidgets('enables the button once text is entered', (tester) async {
-      useTallView(tester);
-      final services = TestServices(settings: configured);
-      await services.initAppState();
-      await tester.pumpWidget(services.wrap(const EventTextInputScreen()));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Create Event from Text'), findsOneWidget);
-      final button = find.byKey(const Key('create_event_button'));
-      expect(tester.widget<ButtonStyleButton>(button).enabled, isFalse);
-
-      await tester.enterText(
-        find.byType(TextField),
-        'Meeting tomorrow at 2 PM',
-      );
-      await tester.pump();
-      expect(tester.widget<ButtonStyleButton>(button).enabled, isTrue);
-      expect(
-        find.descendant(of: button, matching: find.text('Create Event')),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('extracts events and opens the review screen', (tester) async {
-      useTallView(tester);
-      final services = TestServices(settings: configured);
-      services.interpreter.result = sampleResult(
-        events: [sampleEvent(title: 'Board meeting')],
-      );
-      await services.initAppState();
-      await tester.pumpWidget(services.wrap(const EventTextInputScreen()));
-
-      await tester.enterText(
-        find.byType(TextField),
-        'Board meeting May 25 10am',
-      );
-      await tester.pump();
-      await tester.tap(find.byKey(const Key('create_event_button')));
-      await tester.pumpAndSettle();
-
-      expect(
-        services.interpreter.calls.single.text,
-        'Board meeting May 25 10am',
-      );
-      expect(services.aiServiceFactory.createdWith.single, configured);
-      expect(find.byType(ReviewScreen), findsOneWidget);
-      expect(find.text('Board meeting'), findsOneWidget);
-    });
-
-    testWidgets('shows a message when no events are found', (tester) async {
-      useTallView(tester);
-      final services = TestServices(settings: configured);
-      await services.initAppState();
-      await tester.pumpWidget(services.wrap(const EventTextInputScreen()));
-
-      await tester.enterText(find.byType(TextField), 'hello');
-      await tester.pump();
-      await tester.tap(find.byKey(const Key('create_event_button')));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(ReviewScreen), findsNothing);
-      expect(find.textContaining('No events found'), findsOneWidget);
-    });
-
-    testWidgets('shows the friendly AiException message', (tester) async {
-      useTallView(tester);
-      final services = TestServices(settings: configured);
-      services.interpreter.error = const AiException(
-        AiErrorKind.auth,
-        'HTTP 401',
-        statusCode: 401,
-      );
-      await services.initAppState();
-      await tester.pumpWidget(services.wrap(const EventTextInputScreen()));
-
-      await tester.enterText(find.byType(TextField), 'Lunch at 12');
-      await tester.pump();
-      await tester.tap(find.byKey(const Key('create_event_button')));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text(AiException.userMessageFor(AiErrorKind.auth)),
-        findsOneWidget,
-      );
     });
   });
 
