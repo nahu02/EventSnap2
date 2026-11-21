@@ -50,9 +50,6 @@ class AppTheme {
   /// Builds the full theme with component themes for [colorScheme].
   static ThemeData fromColorScheme(ColorScheme colorScheme) {
     final cs = colorScheme;
-    const mediumShape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.all(Radius.circular(radius)),
-    );
     const smallShape = RoundedRectangleBorder(
       borderRadius: BorderRadius.all(Radius.circular(smallRadius)),
     );
@@ -86,10 +83,9 @@ class AppTheme {
         contentTextStyle: TextStyle(color: cs.onSurface),
       ),
       bottomSheetTheme: const BottomSheetThemeData(showDragHandle: true),
-      cardTheme: const CardThemeData(
-        shape: mediumShape,
-        clipBehavior: Clip.antiAlias,
-      ),
+      // No `shape` here: overriding it strips the outline Card.outlined
+      // draws. The M3 default card radius already matches [radius] (12).
+      cardTheme: const CardThemeData(clipBehavior: Clip.antiAlias),
       chipTheme: const ChipThemeData(shape: smallShape),
       dialogTheme: const DialogThemeData(
         shape: RoundedRectangleBorder(

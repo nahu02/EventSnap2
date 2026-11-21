@@ -47,10 +47,8 @@ void main() {
       for (final theme in [AppTheme.light(), AppTheme.dark()]) {
         final cs = theme.colorScheme;
         expect(theme.snackBarTheme.behavior, SnackBarBehavior.floating);
-        expect(
-          (theme.cardTheme.shape! as RoundedRectangleBorder).borderRadius,
-          const BorderRadius.all(Radius.circular(AppTheme.radius)),
-        );
+        // No card shape override: it would strip Card.outlined's border.
+        expect(theme.cardTheme.shape, isNull);
         final appBarColor = theme.appBarTheme.backgroundColor!;
         expect(
           WidgetStateProperty.resolveAs<Color>(appBarColor, {}),

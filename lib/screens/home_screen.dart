@@ -373,9 +373,13 @@ class _HomeScreenState extends State<HomeScreen> {
       image = fromCamera
           ? await service.captureWithCamera()
           : await service.pickFromGallery();
-    } catch (e) {
+    } on ImageInputException catch (e) {
       // Pickers throw on failure (and return null on cancel); keep the
       // composer as it is and explain briefly.
+      debugPrint('HomeScreen: could not add image: ${e.cause ?? e.message}');
+      if (mounted) _showSnackBar(e.message);
+      return;
+    } catch (e) {
       debugPrint('HomeScreen: could not add image: $e');
       if (mounted) _showSnackBar("Couldn't load that image");
       return;
