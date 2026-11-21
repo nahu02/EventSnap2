@@ -98,5 +98,30 @@ void main() {
       SettingsService service = InMemorySettingsService();
       expect(AppStateProvider(settingsService: service), isA<ChangeNotifier>());
     });
+
+    test(
+      'api key lost notice shows after initialize and can be dismissed',
+      () async {
+        final state = AppStateProvider(
+          settingsService: InMemorySettingsService(null, true),
+        );
+        expect(state.showApiKeyLostNotice, isFalse);
+        await state.initialize();
+        expect(state.showApiKeyLostNotice, isTrue);
+        var notified = 0;
+        state.addListener(() => notified++);
+        state.dismissApiKeyLostNotice();
+        expect(state.showApiKeyLostNotice, isFalse);
+        expect(notified, 1);
+      },
+    );
+
+    test('no notice when nothing was lost', () async {
+      final state = AppStateProvider(
+        settingsService: InMemorySettingsService(),
+      );
+      await state.initialize();
+      expect(state.showApiKeyLostNotice, isFalse);
+    });
   });
 }

@@ -316,6 +316,13 @@ class _HomeScreenState extends State<HomeScreen> {
   // ---------------------------------------------------------------------------
   // Navigation
 
+  Future<void> _openSettingsForLostKey() async {
+    await _openSettings();
+    if (mounted && _appState.isConfigured) {
+      _appState.dismissApiKeyLostNotice();
+    }
+  }
+
   Future<void> _openSettings() async {
     await AppRouter.openSettings(context);
     if (!mounted) return;
@@ -563,6 +570,25 @@ class _HomeScreenState extends State<HomeScreen> {
                 unawaited(appState.initialize());
               },
               child: const Text('Retry'),
+            ),
+          ],
+        ),
+        gap,
+      ],
+      if (appState.showApiKeyLostNotice) ...[
+        InlineBanner(
+          key: const Key('api_key_lost_banner'),
+          tone: BannerTone.warning,
+          icon: Icons.key_off_outlined,
+          title: 'Please re-enter your API key',
+          message:
+              "EventSnap's secure storage was upgraded and your saved key "
+              "couldn't be carried over. Your other settings were kept.",
+          onDismiss: appState.dismissApiKeyLostNotice,
+          actions: [
+            TextButton(
+              onPressed: _openSettingsForLostKey,
+              child: const Text('Open settings'),
             ),
           ],
         ),

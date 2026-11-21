@@ -350,6 +350,46 @@ void main() {
     });
   });
 
+  group('api key lost notice', () {
+    testWidgets('shows, opens settings and dismisses', (tester) async {
+      final services = TestServices(
+        settingsService: InMemorySettingsService(null, true),
+      );
+      await pumpHome(tester, services: services);
+      expect(find.text('Please re-enter your API key'), findsOneWidget);
+
+      await tester.tap(find.text('Open settings').first);
+      await tester.pumpAndSettle();
+      expect(settingsScreen, findsOneWidget);
+      // Not configured yet: banner stays.
+      tester.state<NavigatorState>(find.byType(Navigator)).pop();
+      await tester.pumpAndSettle();
+      expect(find.text('Please re-enter your API key'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Dismiss'));
+      await tester.pumpAndSettle();
+      expect(find.text('Please re-enter your API key'), findsNothing);
+    });
+
+    testWidgets('hidden when nothing was lost', (tester) async {
+      await pumpHome(tester, settings: null);
+      expect(find.text('Please re-enter your API key'), findsNothing);
+    });
+
+    testWidgets('disappears once a key is configured', (tester) async {
+      final services = TestServices(
+        settingsService: InMemorySettingsService(null, true),
+      );
+      await pumpHome(tester, services: services);
+      await tester.tap(find.text('Open settings').first);
+      await tester.pumpAndSettle();
+      await services.appState.updateSettings(configured);
+      tester.state<NavigatorState>(find.byType(Navigator)).pop();
+      await tester.pumpAndSettle();
+      expect(find.text('Please re-enter your API key'), findsNothing);
+    });
+  });
+
   group('setup and status', () {
     testWidgets('setup card when not configured', (tester) async {
       final services = await pumpHome(tester, settings: null);

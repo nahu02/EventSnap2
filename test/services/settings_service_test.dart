@@ -27,13 +27,10 @@ void main() {
   });
 
   group('secure storage configuration', () {
-    test('migrates EncryptedSharedPreferences data from app 2.x', () {
+    test('uses the plain v11 Android backend', () {
       final options = SecureSettingsService.androidOptions.toMap();
-      expect(options['migrateOnAlgorithmChange'], 'true');
-      // Same file and key prefix as flutter_secure_storage 9 used.
+      expect(options.containsKey('encryptedSharedPreferences'), isFalse);
       expect(options['sharedPreferencesName'] ?? '', isEmpty);
-      expect(options['preferencesKeyPrefix'] ?? '', isEmpty);
-      expect(options['storageNamespace'] ?? '', isEmpty);
     });
 
     test('keeps the iOS keychain group of app 2.x', () {
@@ -315,6 +312,68 @@ void main() {
       final loaded = await svc.getSettings();
       await svc.updateSettings(loaded.copyWith(maxRetries: 4));
       expect(storage.writes, isEmpty);
+    });
+  });
+
+  group('secure storage upgrade check', () {
+    SecureSettingsService withStatus(
+      SecureStorageUpgradeState state, {
+      Map<String, Object> prefs = const {},
+      Object? throwing,
+    }) {
+      FlutterSecureStorage.setMockInitialValues({});
+      SharedPreferences.setMockInitialValues(Map.of(prefs));
+      return SecureSettingsService(
+        upgradeCheck: () async {
+          if (throwing != null) throw throwing;
+          return SecureStorageUpgradeStatus(state: state);
+        },
+      );
+    }
+
+    test('ok -> no loss reported', () async {
+      final s = withStatus(SecureStorageUpgradeState.ok);
+      await s.getSettings();
+      expect(s.apiKeysLostInUpgrade, isFalse);
+    });
+
+    for (final state in [
+      SecureStorageUpgradeState.legacyDataUnreadable,
+      SecureStorageUpgradeState.legacyDataDiscarded,
+    ]) {
+      test('$state -> loss reported once', () async {
+        final s = withStatus(state);
+        await s.getSettings();
+        expect(s.apiKeysLostInUpgrade, isTrue);
+        expect((await prefs()).getBool('api_key_lost_notice_shown'), isTrue);
+
+        // A later launch reporting the same state does not re-raise it.
+        final again = SecureSettingsService(
+          upgradeCheck: () async => SecureStorageUpgradeStatus(state: state),
+        );
+        await again.getSettings();
+        expect(again.apiKeysLostInUpgrade, isFalse);
+      });
+    }
+
+    test('check failure -> treated as ok', () async {
+      final s = withStatus(
+        SecureStorageUpgradeState.ok,
+        throwing: Exception('boom'),
+      );
+      await s.getSettings();
+      expect(s.apiKeysLostInUpgrade, isFalse);
+    });
+
+    test('a new key can be saved and read after a reported loss', () async {
+      final s = withStatus(SecureStorageUpgradeState.legacyDataUnreadable);
+      final loaded = await s.getSettings();
+      expect(loaded.openAiApiKey, isEmpty);
+      expect(s.getCachedSettings(), isNotNull);
+
+      await s.updateSettings(loaded.copyWith(openAiApiKey: 'sk-new-key-12345'));
+      s.invalidateCache();
+      expect((await s.getSettings()).openAiApiKey, 'sk-new-key-12345');
     });
   });
 }

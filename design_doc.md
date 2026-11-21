@@ -116,7 +116,7 @@ Events can be edited, marked as all-day, and deleted with undo. Changing the sta
 
 ## Settings and Persistence
 
-- API keys are stored per provider with `flutter_secure_storage`. The `flutter_secure_storage` version is pinned to 10.x with `migrateOnAlgorithmChange`, so that keys saved by v2 are migrated on first access. Version 11 dropped the older storage backend, so the upgrade to 11 has to wait until users have run a 10.x build.
+- API keys are stored per provider with `flutter_secure_storage`. The app uses `flutter_secure_storage` 11, which dropped the older EncryptedSharedPreferences backend, so keys saved by v2 can't be migrated. On first load `checkUpgradeStatus()` runs before any secure read; if it reports lost data, the home screen shows a one-time banner asking the user to re-enter the API key (other settings are kept).
 - Other settings are stored in `shared_preferences`, using a `settings_version` key for migration from v1.
 - `fromJson` is lenient, so bad values fall back to defaults. `updateSettings` persists only settings whose numeric ranges are valid. Blank keys and models are allowed, so the theme can be changed before setup is complete.
 
@@ -156,7 +156,7 @@ Events can be edited, marked as all-day, and deleted with undo. Changing the sta
 | `material_ui` | Material 3 widgets (replaces `package:flutter/material.dart`) |
 | `http` | OpenAI-compatible API client |
 | `provider` | State management |
-| `flutter_secure_storage` (10.x) | API key storage |
+| `flutter_secure_storage` (11.x) | API key storage |
 | `shared_preferences` | Other settings and model cache |
 | `image_picker` | Gallery and camera input |
 | `dynamic_color` | Dynamic Material colour |
@@ -172,7 +172,6 @@ Build toolchain: Flutter 3.50 with Dart 3.14, Android Gradle Plugin 9.3, Kotlin 
 
 ## Open Items
 
-- Upgrade `flutter_secure_storage` to 11.x in a later release, after users have migrated through a 10.x build.
 - Live provider behaviour can vary across the upstream vendors behind Opper. Schema-validation failures surface as `invalidResponse`, and the downgrade ladder and lenient parser handle them.
 
 ## Reference

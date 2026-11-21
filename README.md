@@ -57,7 +57,7 @@ EventSnap2 supports two providers. Pick one in Settings.
 - `material_ui` – Material 3 widgets
 - `http` – Thin OpenAI-compatible API client
 - `provider` – State management
-- `flutter_secure_storage` – Secure storage for API keys (pinned to 10.x for data migration)
+- `flutter_secure_storage` – Secure storage for API keys (v11; keys saved by v2.x can't be migrated, so the app detects that and asks for the key again)
 - `shared_preferences` – Persistent key-value storage
 - `image_picker` – Gallery and camera input
 - `dynamic_color` – Dynamic Material colour

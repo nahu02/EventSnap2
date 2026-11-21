@@ -19,8 +19,14 @@ import 'package:event_snap_2/services/settings_service.dart';
 
 /// [SettingsService] keeping [Settings] in memory.
 class InMemorySettingsService implements SettingsService {
-  InMemorySettingsService([Settings? initial])
-    : settings = initial ?? Settings.defaults();
+  InMemorySettingsService([
+    Settings? initial,
+    this.apiKeysLostInUpgrade = false,
+  ]) : settings = initial ?? Settings.defaults();
+
+  /// Simulates saved API keys lost in the secure-storage upgrade.
+  @override
+  final bool apiKeysLostInUpgrade;
 
   /// Currently stored settings.
   Settings settings;

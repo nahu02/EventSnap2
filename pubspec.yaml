@@ -35,11 +35,10 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^2.0.0
   dynamic_color: ^2.1.0
-  # Pinned to 10.x on purpose: 11.x removed the EncryptedSharedPreferences
-  # backend that v2.x (flutter_secure_storage 9) wrote the API key with. 10.x
-  # migrates that data automatically on first access (migrateOnAlgorithmChange).
-  # See docs/v3_plan.md 6.A.2 before bumping to 11.
-  flutter_secure_storage: ^10.3.4
+  # v11 dropped the EncryptedSharedPreferences backend that v2.x wrote the API
+  # key with; that data can't be migrated. SecureSettingsService detects it via
+  # checkUpgradeStatus() and the home screen asks the user to re-enter the key.
+  flutter_secure_storage: ^11.2.0
   http: ^1.6.0
   image_picker: ^1.2.4
   intl: ^0.20.3

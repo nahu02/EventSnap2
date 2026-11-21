@@ -32,6 +32,11 @@ abstract class SettingsService {
 
   /// Returns true if settings have been stored before
   Future<bool> hasSettings();
+
+  /// True when the saved API keys were lost in the flutter_secure_storage 11
+  /// upgrade (v2.x data can't be migrated) and this is the first launch that
+  /// noticed. Meaningful after [getSettings]; false by default.
+  bool get apiKeysLostInUpgrade;
 }
 
 /// [SettingsService] using flutter_secure_storage (API keys) and
@@ -50,6 +55,7 @@ class SecureSettingsService implements SettingsService {
   SecureSettingsService({
     FlutterSecureStorage? secureStorage,
     Future<SharedPreferences> Function()? preferences,
+    @visibleForTesting this._upgradeCheck,
   }) : _secureStorage = secureStorage ?? defaultSecureStorage,
        _preferences = preferences ?? SharedPreferences.getInstance;
 
@@ -57,15 +63,10 @@ class SecureSettingsService implements SettingsService {
   ///
   /// App 2.x wrote the OpenAI key with flutter_secure_storage 9 and
   /// `AndroidOptions(encryptedSharedPreferences: true)`. flutter_secure_storage
-  /// 10.x (used here) finds that Jetpack EncryptedSharedPreferences data on
-  /// first access and, with `migrateOnAlgorithmChange: true`, re-encrypts it
-  /// with its own AES-GCM/RSA-OAEP ciphers under the same file name and key
-  /// prefix (falling back to reading the old store if migration fails).
-  /// Version 11 removed that backend, so it must not be used until users have
-  /// run a 10.x-based release once.
-  static const AndroidOptions androidOptions = AndroidOptions(
-    migrateOnAlgorithmChange: true,
-  );
+  /// 11 removed that backend, so such data can't be migrated. Instead
+  /// [getSettings] calls `checkUpgradeStatus` before the first secure read and
+  /// reports the loss via [apiKeysLostInUpgrade]; the user re-enters the key.
+  static const AndroidOptions androidOptions = AndroidOptions();
 
   /// iOS options (unchanged from 2.x so keychain items stay reachable).
   static const IOSOptions iosOptions = IOSOptions(
@@ -93,6 +94,10 @@ class SecureSettingsService implements SettingsService {
   static const String debugModeKey = 'debug_mode';
   static const String settingsVersionKey = 'settings_version';
 
+  /// Set once the lost-keys notice has been reported, so it is raised for one
+  /// launch only (the upgrade status may be reported again on later launches).
+  static const String apiKeyLostNoticeShownKey = 'api_key_lost_notice_shown';
+
   /// Current storage format version.
   static const int currentSettingsVersion = 2;
 
@@ -114,6 +119,7 @@ class SecureSettingsService implements SettingsService {
     structuredOutputModeKey,
     debugModeKey,
     settingsVersionKey,
+    apiKeyLostNoticeShownKey,
   ];
   static const List<String> _v1PrefsKeys = [
     openAiModelKey,
@@ -124,6 +130,13 @@ class SecureSettingsService implements SettingsService {
 
   final FlutterSecureStorage _secureStorage;
   final Future<SharedPreferences> Function() _preferences;
+  final Future<SecureStorageUpgradeStatus> Function()? _upgradeCheck;
+
+  bool _upgradeChecked = false;
+  bool _apiKeysLost = false;
+
+  @override
+  bool get apiKeysLostInUpgrade => _apiKeysLost;
 
   // Cache for improved performance
   Settings? _cachedSettings;
@@ -149,7 +162,8 @@ class SecureSettingsService implements SettingsService {
     try {
       final prefs = await _preferences();
       await _performMigrationIfNeeded(prefs);
-      settings = await _loadSettings(prefs);
+      final skipSecureRead = await _checkUpgradeOnce(prefs);
+      settings = await _loadSettings(prefs, skipSecureRead: skipSecureRead);
     } catch (e) {
       debugPrint('SecureSettingsService: failed to load settings: $e');
       settings = Settings.defaults();
@@ -275,12 +289,46 @@ class SecureSettingsService implements SettingsService {
 
   // ---------------------------------------------------------------------------
 
-  Future<Settings> _loadSettings(SharedPreferences prefs) async {
+  /// Runs `checkUpgradeStatus` before the first secure read. Returns true when
+  /// the old keys are gone, so the caller treats them as empty-but-loaded
+  /// instead of reading entries that are discarded or can't be decrypted.
+  Future<bool> _checkUpgradeOnce(SharedPreferences prefs) async {
+    if (_upgradeChecked) return false;
+    _upgradeChecked = true;
+    try {
+      final status =
+          await (_upgradeCheck?.call() ??
+              _secureStorage.checkUpgradeStatus(
+                aOptions: androidOptions,
+                iOptions: iosOptions,
+              ));
+      final lost =
+          status.state == SecureStorageUpgradeState.legacyDataUnreadable ||
+          status.state == SecureStorageUpgradeState.legacyDataDiscarded;
+      if (!lost) return false;
+      if (prefs.getBool(apiKeyLostNoticeShownKey) ?? false) return true;
+      await prefs.setBool(apiKeyLostNoticeShownKey, true);
+      _apiKeysLost = true;
+      return true;
+    } catch (e) {
+      debugPrint('SecureSettingsService: upgrade check failed: $e');
+      return false;
+    }
+  }
+
+  Future<Settings> _loadSettings(
+    SharedPreferences prefs, {
+    bool skipSecureRead = false,
+  }) async {
     const d = Settings();
     return Settings(
       provider: AiProvider.fromId(_getString(prefs, providerKey)),
-      openAiApiKey: await _readSecure(openAiApiKeyKey),
-      opperApiKey: await _readSecure(opperApiKeyKey),
+      openAiApiKey: skipSecureRead
+          ? _markEmpty(openAiApiKeyKey)
+          : await _readSecure(openAiApiKeyKey),
+      opperApiKey: skipSecureRead
+          ? _markEmpty(opperApiKeyKey)
+          : await _readSecure(opperApiKeyKey),
       openAiModel:
           _nonBlank(_getString(prefs, openAiModelKey)) ?? d.openAiModel,
       opperModel: _nonBlank(_getString(prefs, opperModelKey)) ?? d.opperModel,
@@ -320,6 +368,12 @@ class SecureSettingsService implements SettingsService {
       await prefs.setString(providerKey, AiProvider.openai.id);
     }
     await prefs.setInt(settingsVersionKey, currentSettingsVersion);
+  }
+
+  String _markEmpty(String key) {
+    _loadedSecrets[key] = '';
+    _failedSecretReads.remove(key);
+    return '';
   }
 
   Future<String> _readSecure(String key) async {

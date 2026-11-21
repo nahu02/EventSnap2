@@ -12,6 +12,7 @@ class AppStateProvider extends ChangeNotifier {
   Settings _settings = Settings.defaults();
   bool _isInitialized = false;
   String? _errorMessage;
+  bool _apiKeyLostNoticeDismissed = false;
 
   /// Current settings ([Settings.defaults] until [initialize] completes).
   Settings get settings => _settings;
@@ -24,6 +25,20 @@ class AppStateProvider extends ChangeNotifier {
 
   /// Last error from loading/saving settings, if any.
   String? get errorMessage => _errorMessage;
+
+  /// Whether to tell the user their saved API key was lost in the secure
+  /// storage upgrade. The service reports the loss on one launch only, so the
+  /// notice does not return on later launches; dismissing lasts the session.
+  bool get showApiKeyLostNotice =>
+      _isInitialized &&
+      _settingsService.apiKeysLostInUpgrade &&
+      !_apiKeyLostNoticeDismissed;
+
+  void dismissApiKeyLostNotice() {
+    if (_apiKeyLostNoticeDismissed) return;
+    _apiKeyLostNoticeDismissed = true;
+    notifyListeners();
+  }
 
   /// Flutter theme mode mapped from [Settings.themeMode].
   ThemeMode get themeMode => switch (_settings.themeMode) {
