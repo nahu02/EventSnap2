@@ -5,6 +5,8 @@ export 'ai/ai_cancellation_token.dart';
 export 'ai/ai_exceptions.dart';
 export 'ai/ai_service_factory.dart';
 export 'ai/calendar_event_interpreter.dart';
+export 'ai/default_ai_service_factory.dart';
+export 'ai/default_model_catalog.dart';
 export 'ai/model_catalog.dart';
 export 'calendar/calendar_creator.dart';
 export 'calendar/icalendar_creator.dart';
