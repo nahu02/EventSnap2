@@ -1,0 +1,129 @@
+name: PR APK Build
+
+# Builds an installable APK for every pull request to main and attaches it to
+# the workflow run as an artifact, so changes can be tried on a device before
+# merging. Releases are still created only by main.yml on pushes to main.
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write # sticky comment with the download link
+
+concurrency:
+  group: pr-apk-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Same-repository PRs get the release keystore, so the APK installs over
+      # the published app (useful for testing upgrades and data migration).
+      # Fork PRs don't receive secrets; the build then falls back to debug
+      # signing (if the PR's Gradle config supports it) and needs a fresh install.
+      - name: Configure release signing (if secrets are available)
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > android/app/keystore.jks
+            {
+              echo "storePassword=$KEYSTORE_PASSWORD"
+              echo "keyPassword=$KEY_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "storeFile=keystore.jks"
+            } > android/key.properties
+            echo "mode=release key" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Signing secrets unavailable; building with debug signing."
+            echo "mode=debug key" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze code
+        run: flutter analyze
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Rename APK
+        id: apk
+        run: |
+          short_sha="$(git rev-parse --short "${{ github.event.pull_request.head.sha }}")"
+          name="eventsnap2-pr-${{ github.event.pull_request.number }}-${short_sha}"
+          mv build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/${name}.apk"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "sha=${short_sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.name }}
+          path: build/app/outputs/flutter-apk/${{ steps.apk.outputs.name }}.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Comment download link on the PR
+        # GITHUB_TOKEN is read-only for fork PRs, so only comment on same-repo PRs.
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v7
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          APK_NAME: ${{ steps.apk.outputs.name }}
+          SHORT_SHA: ${{ steps.apk.outputs.sha }}
+          SIGNING: ${{ steps.signing.outputs.mode }}
+        with:
+          script: |
+            const marker = '<!-- pr-apk-build -->';
+            const body = [
+              marker,
+              '### 📱 Test APK',
+              '',
+              `[Download \`${process.env.APK_NAME}.apk\`](${process.env.ARTIFACT_URL}) (zipped artifact, kept 30 days; requires being signed in to GitHub)`,
+              '',
+              `Built from ${process.env.SHORT_SHA}, signed with the ${process.env.SIGNING}.` +
+                (process.env.SIGNING === 'release key'
+                  ? ' It installs over the released app.'
+                  : ' Uninstall the released app first.'),
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
