@@ -1,219 +1,140 @@
-import 'package:flutter/material.dart';
+import 'package:dynamic_color/dynamic_color.dart';
+import 'package:material_ui/material_ui.dart';
 
-/// App theme configuration with support for light and dark themes
+/// App theme (Material 3, light and dark) realising the shared UI conventions
+/// of docs/v3_plan.md §6.0.
+///
+/// Colours come from the platform's dynamic scheme (Material You) when
+/// available and otherwise from a scheme generated from [seedColor]. Widgets
+/// must only use `Theme.of(context).colorScheme` roles: success → primary,
+/// warning → tertiary, error → error.
 class AppTheme {
-  // Primary brand colors
-  static const Color primaryColor = Color(0xFF2196F3); // Blue
-  static const Color secondaryColor = Color(0xFF03DAC6); // Teal
-  static const Color errorColor = Color(0xFFB00020);
+  AppTheme._();
 
-  // Light theme colors
-  static const Color lightBackground = Color(0xFFFAFAFA);
-  static const Color lightSurface = Colors.white;
-  static const Color lightOnSurface = Color(0xFF1C1B1F);
+  /// Brand seed colour used when no dynamic colour scheme is available
+  /// (a calm indigo that works well in light and dark).
+  static const Color seedColor = Color(0xFF4355B9);
 
-  // Dark theme colors
-  static const Color darkBackground = Color(0xFF121212);
-  static const Color darkSurface = Color(0xFF1E1E1E);
-  static const Color darkOnSurface = Color(0xFFE6E1E5);
+  /// Corner radius of cards, inputs and other medium-sized surfaces.
+  static const double radius = 12;
 
-  /// Light theme configuration
-  static ThemeData get lightTheme {
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.light,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: primaryColor,
-        brightness: Brightness.light,
-        surface: lightSurface,
-        onSurface: lightOnSurface,
-        error: errorColor,
-      ).copyWith(surface: lightBackground),
+  /// Corner radius of small components (chips, snack bars).
+  static const double smallRadius = 8;
 
-      // App Bar Theme
-      appBarTheme: const AppBarTheme(
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 2,
-        centerTitle: true,
-        titleTextStyle: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
-          color: Colors.white,
-        ),
-      ),
+  static ThemeData light({ColorScheme? dynamicScheme}) =>
+      fromColorScheme(colorSchemeFor(Brightness.light, dynamicScheme));
 
-      // Card Theme
-      cardTheme: const CardThemeData(
-        elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(12)),
-        ),
-        margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      ),
+  static ThemeData dark({ColorScheme? dynamicScheme}) =>
+      fromColorScheme(colorSchemeFor(Brightness.dark, dynamicScheme));
 
-      // Input Decoration Theme
-      inputDecorationTheme: InputDecorationTheme(
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 12,
-        ),
-        filled: true,
-        fillColor: lightSurface,
-      ),
-
-      // Elevated Button Theme
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: primaryColor,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          elevation: 2,
-        ),
-      ),
-
-      // Text Button Theme
-      textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          foregroundColor: primaryColor,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        ),
-      ),
-
-      // Floating Action Button Theme
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 4,
-      ),
-
-      // Text Theme
-      textTheme: const TextTheme(
-        headlineLarge: TextStyle(
-          fontSize: 32,
-          fontWeight: FontWeight.bold,
-          color: lightOnSurface,
-        ),
-        headlineMedium: TextStyle(
-          fontSize: 28,
-          fontWeight: FontWeight.w600,
-          color: lightOnSurface,
-        ),
-        headlineSmall: TextStyle(
-          fontSize: 24,
-          fontWeight: FontWeight.w600,
-          color: lightOnSurface,
-        ),
-        bodyLarge: TextStyle(fontSize: 16, color: lightOnSurface),
-        bodyMedium: TextStyle(fontSize: 14, color: lightOnSurface),
-        labelLarge: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          color: lightOnSurface,
-        ),
-      ),
-    );
+  /// The colour scheme for [brightness]: [dynamicScheme] (with its error
+  /// colours harmonized) when given, otherwise one generated from
+  /// [seedColor]. A dynamic scheme of the wrong brightness is regenerated from
+  /// its primary colour.
+  static ColorScheme colorSchemeFor(
+    Brightness brightness, [
+    ColorScheme? dynamicScheme,
+  ]) {
+    if (dynamicScheme == null) {
+      return ColorScheme.fromSeed(seedColor: seedColor, brightness: brightness);
+    }
+    if (dynamicScheme.brightness != brightness) {
+      return ColorScheme.fromSeed(
+        seedColor: dynamicScheme.primary,
+        brightness: brightness,
+      ).harmonized();
+    }
+    return dynamicScheme.harmonized();
   }
 
-  /// Dark theme configuration
-  static ThemeData get darkTheme {
+  /// Builds the full theme with component themes for [colorScheme].
+  static ThemeData fromColorScheme(ColorScheme colorScheme) {
+    final cs = colorScheme;
+    const smallShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.all(Radius.circular(smallRadius)),
+    );
+    const buttonMinimumSize = Size(64, 48);
+    const buttonPadding = EdgeInsets.symmetric(horizontal: 24, vertical: 12);
+
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: primaryColor,
-        brightness: Brightness.dark,
-        surface: darkSurface,
-        onSurface: darkOnSurface,
-        error: errorColor,
-      ).copyWith(surface: darkBackground),
-
-      // App Bar Theme
-      appBarTheme: AppBarTheme(
-        backgroundColor: darkSurface,
-        foregroundColor: darkOnSurface,
-        elevation: 2,
-        centerTitle: true,
-        titleTextStyle: const TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
-          color: darkOnSurface,
+      colorScheme: cs,
+      scaffoldBackgroundColor: cs.surface,
+      appBarTheme: AppBarThemeData(
+        // Surface-coloured; a slightly darker container tone when content
+        // scrolls underneath instead of a shadow or tint.
+        backgroundColor: WidgetStateColor.resolveWith(
+          (states) => states.contains(WidgetState.scrolledUnder)
+              ? cs.surfaceContainer
+              : cs.surface,
         ),
+        foregroundColor: cs.onSurface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
       ),
-
-      // Card Theme
-      cardTheme: const CardThemeData(
-        elevation: 2,
+      bottomAppBarTheme: BottomAppBarThemeData(
+        color: cs.surfaceContainer,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      ),
+      bannerTheme: MaterialBannerThemeData(
+        backgroundColor: cs.surfaceContainerHigh,
+        contentTextStyle: TextStyle(color: cs.onSurface),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(showDragHandle: true),
+      // No `shape` here: overriding it strips the outline Card.outlined
+      // draws. The M3 default card radius already matches [radius] (12).
+      cardTheme: const CardThemeData(clipBehavior: Clip.antiAlias),
+      chipTheme: const ChipThemeData(shape: smallShape),
+      dialogTheme: const DialogThemeData(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(12)),
-        ),
-        margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        color: darkSurface,
-      ),
-
-      // Input Decoration Theme
-      inputDecorationTheme: InputDecorationTheme(
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 12,
-        ),
-        filled: true,
-        fillColor: darkSurface,
-      ),
-
-      // Elevated Button Theme
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: primaryColor,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          elevation: 2,
+          borderRadius: BorderRadius.all(Radius.circular(28)),
         ),
       ),
-
-      // Text Button Theme
-      textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          foregroundColor: secondaryColor,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      dividerTheme: DividerThemeData(
+        color: cs.outlineVariant,
+        space: 1,
+        thickness: 1,
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: buttonMinimumSize,
+          padding: buttonPadding,
         ),
       ),
-
-      // Floating Action Button Theme
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 4,
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: buttonMinimumSize,
+          padding: buttonPadding,
+        ),
       ),
-
-      // Text Theme
-      textTheme: const TextTheme(
-        headlineLarge: TextStyle(
-          fontSize: 32,
-          fontWeight: FontWeight.bold,
-          color: darkOnSurface,
+      inputDecorationTheme: const InputDecorationThemeData(
+        // Only the shape is set; Material 3 resolves the border colour per
+        // state (outline, primary when focused, error, disabled).
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(radius)),
         ),
-        headlineMedium: TextStyle(
-          fontSize: 28,
-          fontWeight: FontWeight.w600,
-          color: darkOnSurface,
+        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        alignLabelWithHint: true,
+        helperMaxLines: 3,
+        errorMaxLines: 3,
+      ),
+      listTileTheme: ListTileThemeData(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+        iconColor: cs.onSurfaceVariant,
+        minVerticalPadding: 8,
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: SegmentedButton.styleFrom(
+          tapTargetSize: MaterialTapTargetSize.padded,
+          visualDensity: VisualDensity.standard,
         ),
-        headlineSmall: TextStyle(
-          fontSize: 24,
-          fontWeight: FontWeight.w600,
-          color: darkOnSurface,
-        ),
-        bodyLarge: TextStyle(fontSize: 16, color: darkOnSurface),
-        bodyMedium: TextStyle(fontSize: 14, color: darkOnSurface),
-        labelLarge: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          color: darkOnSurface,
-        ),
+      ),
+      snackBarTheme: const SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: smallShape,
+        insetPadding: EdgeInsets.fromLTRB(16, 0, 16, 16),
       ),
     );
   }

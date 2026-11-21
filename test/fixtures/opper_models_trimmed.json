@@ -1,0 +1,635 @@
+{
+  "models": [
+    {
+      "id": "openai/gpt-5-mini",
+      "type": "llm",
+      "name": "GPT-5 Mini",
+      "model_id": "gpt-5-mini",
+      "capabilities": [
+        "text",
+        "tools",
+        "vision",
+        "structured_output",
+        "reasoning",
+        "pdf"
+      ],
+      "speed": "fast",
+      "cost": 0.127,
+      "quality": "great",
+      "context_window": 400000,
+      "description": "Fast, cost-efficient GPT-5. Great for well-defined tasks and precise prompts.",
+      "params": {
+        "max_tokens": true,
+        "reasoning": {
+          "supported": [
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
+          "default": "medium"
+        }
+      },
+      "model": "gpt-5-mini",
+      "family": "gpt-5-mini",
+      "provider": {
+        "slug": "openai",
+        "display_name": "OpenAI"
+      },
+      "maker": {
+        "slug": "openai",
+        "display_name": "OpenAI"
+      },
+      "input_modalities": [
+        "text",
+        "image",
+        "file",
+        "pdf"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "region": "US"
+    },
+    {
+      "id": "openai/gpt-5-nano",
+      "type": "llm",
+      "name": "GPT-5 Nano",
+      "model_id": "gpt-5-nano",
+      "capabilities": [
+        "text",
+        "tools",
+        "vision",
+        "structured_output",
+        "reasoning",
+        "pdf"
+      ],
+      "speed": "very_fast",
+      "cost": 0.034,
+      "quality": "good",
+      "context_window": 400000,
+      "description": "Fastest, cheapest GPT-5. Ideal for summarization, classification, and simple tasks.",
+      "params": {
+        "max_tokens": true,
+        "reasoning": {
+          "supported": [
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
+          "default": "medium"
+        }
+      },
+      "model": "gpt-5-nano",
+      "family": "gpt-5-nano",
+      "provider": {
+        "slug": "openai",
+        "display_name": "OpenAI"
+      },
+      "maker": {
+        "slug": "openai",
+        "display_name": "OpenAI"
+      },
+      "input_modalities": [
+        "text",
+        "image",
+        "file",
+        "pdf"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "region": "US"
+    },
+    {
+      "id": "anthropic/claude-haiku-5-5",
+      "type": "llm",
+      "name": "Claude Haiku 5.5",
+      "model_id": "claude-haiku-5-5",
+      "capabilities": [
+        "text",
+        "vision",
+        "structured_output",
+        "tools",
+        "pdf",
+        "reasoning"
+      ],
+      "speed": "fast",
+      "cost": 0.044,
+      "quality": "good",
+      "context_window": 1000000,
+      "description": "Claude Haiku 5.5 via the Anthropic API",
+      "params": {
+        "default_max_tokens": 128000,
+        "reasoning": {
+          "supported": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "default": "medium",
+          "mode": "adaptive"
+        }
+      },
+      "model": "claude-haiku-5-5",
+      "family": "claude-haiku-5-5",
+      "provider": {
+        "slug": "anthropic",
+        "display_name": "Anthropic"
+      },
+      "maker": {
+        "slug": "anthropic",
+        "display_name": "Anthropic"
+      },
+      "featured": true,
+      "input_modalities": [
+        "text",
+        "image",
+        "file",
+        "pdf"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "region": "US"
+    },
+    {
+      "id": "gemini/gemini-3.8-flash",
+      "type": "llm",
+      "name": "Gemini 3.8 Flash",
+      "model_id": "gemini-3.8-flash",
+      "capabilities": [
+        "text",
+        "vision",
+        "structured_output",
+        "tools",
+        "pdf",
+        "audio",
+        "video"
+      ],
+      "speed": "fast",
+      "cost": 0.199,
+      "quality": "great",
+      "context_window": 1048576,
+      "description": "Google Gemini 3.8 Flash via the Gemini Developer API",
+      "params": {
+        "max_tokens": true,
+        "caller_params": [
+          "seed"
+        ]
+      },
+      "model": "gemini-3.8-flash",
+      "family": "gemini-3.8-flash",
+      "provider": {
+        "slug": "google",
+        "display_name": "Google"
+      },
+      "maker": {
+        "slug": "google",
+        "display_name": "Google"
+      },
+      "featured": true,
+      "input_modalities": [
+        "text",
+        "image",
+        "file",
+        "pdf",
+        "audio",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "region": "US"
+    },
+    {
+      "id": "vertexai/gemini-3.8-flash",
+      "type": "llm",
+      "name": "Gemini 3.8 Flash",
+      "model_id": "gemini-3.8-flash",
+      "capabilities": [
+        "text",
+        "vision",
+        "structured_output",
+        "tools",
+        "pdf",
+        "audio",
+        "video"
+      ],
+      "speed": "fast",
+      "cost": 0.199,
+      "quality": "great",
+      "context_window": 1048576,
+      "description": "Google Gemini 3.8 Flash via the Vertex AI global endpoint",
+      "params": {
+        "max_tokens": true,
+        "caller_params": [
+          "seed"
+        ]
+      },
+      "model": "gemini-3.8-flash",
+      "family": "gemini-3.8-flash",
+      "provider": {
+        "slug": "google",
+        "display_name": "Google"
+      },
+      "maker": {
+        "slug": "google",
+        "display_name": "Google"
+      },
+      "featured": true,
+      "input_modalities": [
+        "text",
+        "image",
+        "file",
+        "pdf",
+        "audio",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "region": "GLOBAL"
+    },
+    {
+      "id": "openai-batch/gpt-6-luna",
+      "type": "llm",
+      "name": "GPT-6 Luna",
+      "model_id": "gpt-6-luna",
+      "capabilities": [
+        "text",
+        "tools",
+        "vision",
+        "structured_output",
+        "reasoning",
+        "pdf"
+      ],
+      "speed": "fast",
+      "cost": 0.023,
+      "quality": "good",
+      "context_window": 1050000,
+      "description": "OpenAI GPT-6 Luna for cost-sensitive, high-volume work and coding agents.",
+      "params": {
+        "max_tokens": true,
+        "reasoning": {
+          "supported": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "default": "medium"
+        }
+      },
+      "model": "gpt-6-luna",
+      "family": "gpt-6-luna",
+      "provider": {
+        "slug": "openai",
+        "display_name": "OpenAI"
+      },
+      "maker": {
+        "slug": "openai",
+        "display_name": "OpenAI"
+      },
+      "featured": true,
+      "service_tier": "batch",
+      "input_modalities": [
+        "text",
+        "image",
+        "file",
+        "pdf"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "region": "US"
+    },
+    {
+      "id": "deepinfra/zai-org/GLM-5.3",
+      "type": "llm",
+      "name": "GLM-5.3",
+      "model_id": "zai-org/GLM-5.3",
+      "capabilities": [
+        "text",
+        "tools",
+        "structured_output",
+        "thinking",
+        "reasoning"
+      ],
+      "speed": "fast",
+      "cost": 0.209,
+      "quality": "good",
+      "context_window": 1048576,
+      "description": "GLM-5.3 is Z.ai's flagship coding and agentic model, post-trained on the GLM-5.2 base (753B MoE): 1M-token context, 128K output, text-only, reasoning always ...",
+      "params": {
+        "temperature": {
+          "min": 0,
+          "max": 2,
+          "default": 1
+        },
+        "reasoning": {
+          "supported": [
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "default": "max",
+          "wire": "reasoning_effort"
+        },
+        "caller_params": [
+          "chat_template_kwargs",
+          "repetition_penalty",
+          "seed",
+          "top_k"
+        ]
+      },
+      "model": "glm-5.3",
+      "family": "glm-5.3",
+      "provider": {
+        "slug": "deepinfra",
+        "display_name": "DeepInfra"
+      },
+      "maker": {
+        "slug": "zai",
+        "display_name": "Z.ai"
+      },
+      "featured": true,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "region": "US"
+    },
+    {
+      "id": "zai/glm-5.3",
+      "type": "llm",
+      "name": "GLM-5.3",
+      "model_id": "glm-5.3",
+      "capabilities": [
+        "text",
+        "tools",
+        "structured_output",
+        "reasoning",
+        "thinking"
+      ],
+      "speed": "medium",
+      "cost": 0.229,
+      "quality": "great",
+      "context_window": 1048576,
+      "description": "GLM-5.3 is Z.ai's flagship coding and agentic model, post-trained on the GLM-5.2 base (753B MoE): 1M-token context, 128K output, text-only, reasoning always ...",
+      "params": {
+        "temperature": {
+          "min": 0,
+          "max": 1,
+          "default": 1
+        },
+        "max_tokens": true,
+        "reasoning": {
+          "supported": [
+            "low",
+            "high",
+            "max"
+          ],
+          "default": "",
+          "wire": "reasoning_effort"
+        },
+        "caller_params": [
+          "top_k"
+        ]
+      },
+      "model": "glm-5.3",
+      "family": "glm-5.3",
+      "provider": {
+        "slug": "zai",
+        "display_name": "Z.ai"
+      },
+      "maker": {
+        "slug": "zai",
+        "display_name": "Z.ai"
+      },
+      "featured": true,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "region": "SG"
+    },
+    {
+      "id": "openai:flex/gpt-6-luna",
+      "type": "llm",
+      "name": "GPT-6 Luna",
+      "model_id": "gpt-6-luna",
+      "capabilities": [
+        "text",
+        "tools",
+        "vision",
+        "structured_output",
+        "reasoning",
+        "pdf"
+      ],
+      "speed": "fast",
+      "cost": 0.023,
+      "quality": "good",
+      "context_window": 1050000,
+      "description": "OpenAI GPT-6 Luna for cost-sensitive, high-volume work and coding agents.",
+      "params": {
+        "temperature": {
+          "min": 0,
+          "max": 2,
+          "default": 1
+        },
+        "max_tokens": true,
+        "reasoning": {
+          "supported": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "default": "medium"
+        }
+      },
+      "model": "gpt-6-luna",
+      "family": "gpt-6-luna",
+      "provider": {
+        "slug": "openai",
+        "display_name": "OpenAI"
+      },
+      "maker": {
+        "slug": "openai",
+        "display_name": "OpenAI"
+      },
+      "featured": true,
+      "service_tier": "flex",
+      "input_modalities": [
+        "text",
+        "image",
+        "file",
+        "pdf"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "region": "US"
+    },
+    {
+      "id": "openai/gpt-4.1-mini",
+      "type": "llm",
+      "name": "GPT-4.1 Mini",
+      "model_id": "gpt-4.1-mini",
+      "capabilities": [
+        "text",
+        "vision",
+        "structured_output",
+        "tools",
+        "pdf"
+      ],
+      "speed": "fast",
+      "cost": 0.117,
+      "quality": "good",
+      "context_window": 1047576,
+      "description": "Fast, cost-effective GPT-4.1 variant",
+      "params": {
+        "temperature": {
+          "min": 0,
+          "max": 2,
+          "default": 1
+        },
+        "max_tokens": true
+      },
+      "model": "gpt-4.1-mini",
+      "family": "gpt-4.1-mini",
+      "provider": {
+        "slug": "openai",
+        "display_name": "OpenAI"
+      },
+      "maker": {
+        "slug": "openai",
+        "display_name": "OpenAI"
+      },
+      "input_modalities": [
+        "text",
+        "image",
+        "file",
+        "pdf"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "region": "US"
+    },
+    {
+      "id": "mistral:eu/mistral-large-4",
+      "type": "llm",
+      "name": "Mistral Large 4",
+      "model_id": "mistral-large-4-0",
+      "capabilities": [
+        "text",
+        "tools",
+        "vision",
+        "structured_output",
+        "reasoning",
+        "thinking"
+      ],
+      "speed": "fast",
+      "cost": 0.157,
+      "quality": "good",
+      "context_window": 1048576,
+      "description": "Mistral Large 4 always uses reasoning. Set reasoning_effort to low, medium or high. The default is high.",
+      "params": {
+        "temperature": {
+          "min": 0,
+          "max": 2,
+          "default": 0
+        },
+        "reasoning": {
+          "supported": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "default": "high",
+          "wire": "reasoning_effort"
+        },
+        "caller_params": [
+          "frequency_penalty",
+          "presence_penalty",
+          "seed"
+        ]
+      },
+      "model": "mistral-large-4",
+      "family": "mistral-large-4",
+      "provider": {
+        "slug": "mistral",
+        "display_name": "Mistral"
+      },
+      "maker": {
+        "slug": "mistral",
+        "display_name": "Mistral AI"
+      },
+      "featured": true,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "region": "EU"
+    },
+    {
+      "id": "openai/gpt-5-search-api",
+      "type": "llm",
+      "name": "GPT-5 Search API",
+      "model_id": "gpt-5-search-api",
+      "capabilities": [
+        "text",
+        "tools"
+      ],
+      "speed": "medium",
+      "cost": 0.319,
+      "quality": "great",
+      "context_window": 200000,
+      "description": "GPT-5 with search capabilities",
+      "params": {
+        "max_tokens": true
+      },
+      "model": "gpt-5-search-api",
+      "family": "gpt-5-search-api",
+      "provider": {
+        "slug": "openai",
+        "display_name": "OpenAI"
+      },
+      "maker": {
+        "slug": "openai",
+        "display_name": "OpenAI"
+      },
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "region": "US"
+    }
+  ],
+  "total": 12,
+  "offset": 0,
+  "limit": 12,
+  "has_more": false
+}

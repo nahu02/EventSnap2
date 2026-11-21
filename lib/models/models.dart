@@ -6,6 +6,10 @@
 /// ```
 library;
 
+export 'ai_model_info.dart';
+export 'ai_provider.dart';
 export 'event_model.dart';
-export 'calendar_event_properties.dart';
+export 'extraction.dart';
+export 'field_evidence.dart';
 export 'settings.dart';
+export 'shared_content.dart';

@@ -1,205 +1,285 @@
-/// Represents application settings and configuration
-/// Includes OpenAI API configuration and other app preferences
+import 'ai_provider.dart';
+
+/// App theme preference.
+enum AppThemeMode { system, light, dark }
+
+/// Whether to request `response_format: json_schema` from capable models.
+enum StructuredOutputMode { auto, off }
+
+/// Immutable application settings (storage format v2).
+///
+/// API keys are kept for both providers; only the [provider]'s key and model
+/// are used for requests ([activeApiKey], [activeModel]).
 class Settings {
-  /// OpenAI API key for accessing the AI service
-  /// This should be stored securely using flutter_secure_storage
-  String openAiApiKey;
+  static const int minRetries = 0;
+  static const int maxRetriesLimit = 10;
+  static const int minTimeoutSeconds = 5;
+  static const int maxTimeoutSeconds = 300;
 
-  /// OpenAI model to use for event interpretation
-  /// Default is "gpt-4.1" as specified in the design document
-  String openAiModel;
+  static const int defaultMaxRetries = 2;
+  static const int defaultTimeoutSeconds = 60;
 
-  /// Maximum number of retries for API calls
-  int maxRetries;
+  final AiProvider provider;
+  final String openAiApiKey;
+  final String opperApiKey;
+  final String openAiModel;
+  final String opperModel;
 
-  /// Timeout duration for API calls in seconds
-  int timeoutSeconds;
+  /// Retries for transient failures, `0..10`.
+  final int maxRetries;
 
-  /// Whether to show debug information in the UI
-  bool debugMode;
+  /// Request timeout, `5..300` seconds.
+  final int timeoutSeconds;
 
-  /// Creates a Settings instance
-  ///
-  /// [openAiApiKey] is required (can be empty for defaults)
-  /// [openAiModel] defaults to "gpt-4.1"
-  /// [maxRetries] defaults to 3
-  /// [timeoutSeconds] defaults to 30
-  /// [debugMode] defaults to false
-  /// [validateOnCreation] defaults to true, set to false for defaults
-  Settings({
-    required this.openAiApiKey,
-    this.openAiModel = 'gpt-4.1',
-    this.maxRetries = 3,
-    this.timeoutSeconds = 30,
+  final AppThemeMode themeMode;
+
+  /// Start extraction automatically when content is shared into the app.
+  final bool autoProcessShared;
+
+  final StructuredOutputMode structuredOutputMode;
+
+  /// Shows the raw AI response on the review screen.
+  final bool debugMode;
+
+  const Settings({
+    this.provider = AiProvider.openai,
+    this.openAiApiKey = '',
+    this.opperApiKey = '',
+    // Literals must match AiProvider.<p>.defaultModel (asserted in tests);
+    // enum members cannot be read in a const default value.
+    this.openAiModel = 'gpt-5-mini',
+    this.opperModel = 'openai/gpt-5-mini',
+    this.maxRetries = defaultMaxRetries,
+    this.timeoutSeconds = defaultTimeoutSeconds,
+    this.themeMode = AppThemeMode.system,
+    this.autoProcessShared = true,
+    this.structuredOutputMode = StructuredOutputMode.auto,
     this.debugMode = false,
-    bool validateOnCreation = true,
-  }) {
-    if (validateOnCreation) {
-      // Validate API key is not empty
-      if (openAiApiKey.trim().isEmpty) {
-        throw ArgumentError('OpenAI API key cannot be empty');
-      }
+  });
 
-      // Validate model name is not empty
-      if (openAiModel.trim().isEmpty) {
-        throw ArgumentError('OpenAI model cannot be empty');
-      }
+  /// Default settings (no API keys).
+  factory Settings.defaults() => const Settings();
 
-      // Validate reasonable retry count
-      if (maxRetries < 0 || maxRetries > 10) {
-        throw ArgumentError('Max retries must be between 0 and 10');
-      }
+  /// API key stored for [p] (may be empty).
+  String apiKeyFor(AiProvider p) => switch (p) {
+    AiProvider.openai => openAiApiKey,
+    AiProvider.opper => opperApiKey,
+  };
 
-      // Validate reasonable timeout
-      if (timeoutSeconds < 5 || timeoutSeconds > 300) {
-        throw ArgumentError('Timeout must be between 5 and 300 seconds');
-      }
-    }
-  }
+  /// Model id stored for [p] (may be empty).
+  String modelFor(AiProvider p) => switch (p) {
+    AiProvider.openai => openAiModel,
+    AiProvider.opper => opperModel,
+  };
 
-  /// Creates Settings from JSON data
-  ///
-  /// Expected JSON format:
-  /// ```json
-  /// {
-  ///   "openAiApiKey": "sk-...",
-  ///   "openAiModel": "gpt-4.1",
-  ///   "maxRetries": 3,
-  ///   "timeoutSeconds": 30,
-  ///   "debugMode": false
-  /// }
-  /// ```
-  factory Settings.fromJson(Map<String, dynamic> json) {
-    return Settings(
-      openAiApiKey: json['openAiApiKey'] as String,
-      openAiModel: json['openAiModel'] as String? ?? 'gpt-4.1',
-      maxRetries: json['maxRetries'] as int? ?? 3,
-      timeoutSeconds: json['timeoutSeconds'] as int? ?? 30,
-      debugMode: json['debugMode'] as bool? ?? false,
-    );
-  }
+  String get activeApiKey => apiKeyFor(provider);
+  String get activeModel => modelFor(provider);
 
-  /// Converts Settings to JSON format
-  ///
-  /// Returns a Map＜String, dynamic＞ suitable for JSON serialization
-  Map<String, dynamic> toJson() {
-    return {
-      'openAiApiKey': openAiApiKey,
-      'openAiModel': openAiModel,
-      'maxRetries': maxRetries,
-      'timeoutSeconds': timeoutSeconds,
-      'debugMode': debugMode,
-    };
-  }
+  /// True when the active provider has a non-blank key and model.
+  bool get isConfigured =>
+      activeApiKey.trim().isNotEmpty && activeModel.trim().isNotEmpty;
 
-  /// Creates default settings with an empty API key
-  ///
-  /// Useful for first-time app setup
-  factory Settings.defaults() {
-    return Settings(
-      openAiApiKey: '', // Will need to be set by user
-      openAiModel: 'gpt-4.1',
-      maxRetries: 3,
-      timeoutSeconds: 30,
-      debugMode: false,
-      validateOnCreation: false, // Don't validate empty API key on defaults
-    );
-  }
-
-  /// Creates a copy of this Settings with optional field updates
-  ///
-  /// Useful for updating settings without modifying the original
-  Settings copyWith({
-    String? openAiApiKey,
-    String? openAiModel,
-    int? maxRetries,
-    int? timeoutSeconds,
-    bool? debugMode,
-    bool validateOnCreation = true,
-  }) {
-    return Settings(
-      openAiApiKey: openAiApiKey ?? this.openAiApiKey,
-      openAiModel: openAiModel ?? this.openAiModel,
-      maxRetries: maxRetries ?? this.maxRetries,
-      timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
-      debugMode: debugMode ?? this.debugMode,
-      validateOnCreation: validateOnCreation,
-    );
-  }
-
-  /// Validates the settings and returns a list of validation errors
-  ///
-  /// Returns an empty list if the settings are valid
+  /// Blocking problems: missing key/model of the **active** provider and
+  /// out-of-range numeric values. Empty when the settings are usable.
   List<String> validate() {
-    List<String> errors = [];
-
-    if (openAiApiKey.trim().isEmpty) {
-      errors.add('OpenAI API key is required');
-    } else if (!openAiApiKey.startsWith('sk-')) {
-      errors.add('OpenAI API key should start with "sk-"');
+    final errors = <String>[];
+    if (activeApiKey.trim().isEmpty) {
+      errors.add('${provider.displayName} API key is required');
     }
-
-    if (openAiModel.trim().isEmpty) {
-      errors.add('OpenAI model cannot be empty');
+    if (activeModel.trim().isEmpty) {
+      errors.add('${provider.displayName} model is required');
     }
-
-    if (maxRetries < 0 || maxRetries > 10) {
-      errors.add('Max retries must be between 0 and 10');
-    }
-
-    if (timeoutSeconds < 5 || timeoutSeconds > 300) {
-      errors.add('Timeout must be between 5 and 300 seconds');
-    }
-
+    errors.addAll(validateRanges());
     return errors;
   }
 
-  /// Returns true if the settings are valid
-  bool get isValid => validate().isEmpty;
+  /// Only the numeric range checks of [validate] (what persistence enforces).
+  List<String> validateRanges() {
+    final errors = <String>[];
+    if (maxRetries < minRetries || maxRetries > maxRetriesLimit) {
+      errors.add(
+        'Max retries must be between $minRetries and $maxRetriesLimit',
+      );
+    }
+    if (timeoutSeconds < minTimeoutSeconds ||
+        timeoutSeconds > maxTimeoutSeconds) {
+      errors.add(
+        'Timeout must be between $minTimeoutSeconds and $maxTimeoutSeconds seconds',
+      );
+    }
+    return errors;
+  }
 
-  /// Returns true if the API key is configured
-  bool get hasApiKey => openAiApiKey.isNotEmpty;
+  /// Non-blocking hints, e.g. an OpenAI key that does not start with `sk-`.
+  List<String> warnings() {
+    final warnings = <String>[];
+    final openAiKey = openAiApiKey.trim();
+    if (openAiKey.isNotEmpty && !openAiKey.startsWith('sk-')) {
+      warnings.add('OpenAI API keys usually start with "sk-"');
+    }
+    for (final p in AiProvider.values) {
+      final key = apiKeyFor(p);
+      if (key.isNotEmpty && key.trim() != key) {
+        warnings.add(
+          '${p.displayName} API key has leading or trailing whitespace',
+        );
+      }
+    }
+    return warnings;
+  }
 
-  /// Returns true if the settings are ready for use
-  bool get isReadyForUse => isValid && hasApiKey;
-
-  /// Gets the timeout duration as a Duration object
   Duration get timeoutDuration => Duration(seconds: timeoutSeconds);
 
-  /// Returns a safe version of the API key for display (masked)
-  String get maskedApiKey {
-    if (openAiApiKey.length <= 8) {
-      return '*' * openAiApiKey.length;
+  /// The key for [p] masked for display, e.g. `sk-*********abcd`.
+  String maskedKeyFor(AiProvider p) {
+    final key = apiKeyFor(p);
+    if (key.length <= 8) {
+      return '*' * key.length;
     }
-    final prefix = openAiApiKey.substring(0, 3);
-    final suffix = openAiApiKey.substring(openAiApiKey.length - 4);
-    // Use a fixed number of asterisks (9) for consistent display
+    final prefix = key.substring(0, 3);
+    final suffix = key.substring(key.length - 4);
+    // Fixed number of asterisks so the length of the key is not revealed.
     const masked = '*********';
     return '$prefix$masked$suffix';
   }
 
-  @override
-  String toString() {
-    return 'Settings(openAiModel: $openAiModel, maxRetries: $maxRetries, timeoutSeconds: $timeoutSeconds, debugMode: $debugMode, hasApiKey: $hasApiKey)';
+  Settings copyWith({
+    AiProvider? provider,
+    String? openAiApiKey,
+    String? opperApiKey,
+    String? openAiModel,
+    String? opperModel,
+    int? maxRetries,
+    int? timeoutSeconds,
+    AppThemeMode? themeMode,
+    bool? autoProcessShared,
+    StructuredOutputMode? structuredOutputMode,
+    bool? debugMode,
+  }) {
+    return Settings(
+      provider: provider ?? this.provider,
+      openAiApiKey: openAiApiKey ?? this.openAiApiKey,
+      opperApiKey: opperApiKey ?? this.opperApiKey,
+      openAiModel: openAiModel ?? this.openAiModel,
+      opperModel: opperModel ?? this.opperModel,
+      maxRetries: maxRetries ?? this.maxRetries,
+      timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
+      themeMode: themeMode ?? this.themeMode,
+      autoProcessShared: autoProcessShared ?? this.autoProcessShared,
+      structuredOutputMode: structuredOutputMode ?? this.structuredOutputMode,
+      debugMode: debugMode ?? this.debugMode,
+    );
   }
+
+  /// Returns a copy with the API key for [p] replaced.
+  Settings copyWithApiKey(AiProvider p, String apiKey) => switch (p) {
+    AiProvider.openai => copyWith(openAiApiKey: apiKey),
+    AiProvider.opper => copyWith(opperApiKey: apiKey),
+  };
+
+  /// Returns a copy with the model for [p] replaced.
+  Settings copyWithModel(AiProvider p, String model) => switch (p) {
+    AiProvider.openai => copyWith(openAiModel: model),
+    AiProvider.opper => copyWith(opperModel: model),
+  };
+
+  Map<String, dynamic> toJson() => {
+    'provider': provider.id,
+    'openAiApiKey': openAiApiKey,
+    'opperApiKey': opperApiKey,
+    'openAiModel': openAiModel,
+    'opperModel': opperModel,
+    'maxRetries': maxRetries,
+    'timeoutSeconds': timeoutSeconds,
+    'themeMode': themeMode.name,
+    'autoProcessShared': autoProcessShared,
+    'structuredOutputMode': structuredOutputMode.name,
+    'debugMode': debugMode,
+  };
+
+  /// Lenient: missing or malformed values fall back to the defaults.
+  factory Settings.fromJson(Map<String, dynamic> json) {
+    const d = Settings();
+    return Settings(
+      provider: AiProvider.fromId(_string(json['provider'])),
+      openAiApiKey: _string(json['openAiApiKey']) ?? d.openAiApiKey,
+      opperApiKey: _string(json['opperApiKey']) ?? d.opperApiKey,
+      openAiModel: _string(json['openAiModel']) ?? d.openAiModel,
+      opperModel: _string(json['opperModel']) ?? d.opperModel,
+      maxRetries: _int(json['maxRetries']) ?? d.maxRetries,
+      timeoutSeconds: _int(json['timeoutSeconds']) ?? d.timeoutSeconds,
+      themeMode: themeModeFromName(_string(json['themeMode'])),
+      autoProcessShared:
+          _bool(json['autoProcessShared']) ?? d.autoProcessShared,
+      structuredOutputMode: structuredOutputModeFromName(
+        _string(json['structuredOutputMode']),
+      ),
+      debugMode: _bool(json['debugMode']) ?? d.debugMode,
+    );
+  }
+
+  /// Parses an [AppThemeMode] name; unknown → [AppThemeMode.system].
+  static AppThemeMode themeModeFromName(String? name) {
+    for (final mode in AppThemeMode.values) {
+      if (mode.name == name) return mode;
+    }
+    return AppThemeMode.system;
+  }
+
+  /// Parses a [StructuredOutputMode] name; unknown → [StructuredOutputMode.auto].
+  static StructuredOutputMode structuredOutputModeFromName(String? name) {
+    for (final mode in StructuredOutputMode.values) {
+      if (mode.name == name) return mode;
+    }
+    return StructuredOutputMode.auto;
+  }
+
+  static String? _string(Object? value) => value is String ? value : null;
+  static int? _int(Object? value) => value is num ? value.toInt() : null;
+  static bool? _bool(Object? value) => value is bool ? value : null;
 
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
     return other is Settings &&
+        other.provider == provider &&
         other.openAiApiKey == openAiApiKey &&
+        other.opperApiKey == opperApiKey &&
         other.openAiModel == openAiModel &&
+        other.opperModel == opperModel &&
         other.maxRetries == maxRetries &&
         other.timeoutSeconds == timeoutSeconds &&
+        other.themeMode == themeMode &&
+        other.autoProcessShared == autoProcessShared &&
+        other.structuredOutputMode == structuredOutputMode &&
         other.debugMode == debugMode;
   }
 
   @override
-  int get hashCode {
-    return openAiApiKey.hashCode ^
-        openAiModel.hashCode ^
-        maxRetries.hashCode ^
-        timeoutSeconds.hashCode ^
-        debugMode.hashCode;
+  int get hashCode => Object.hash(
+    provider,
+    openAiApiKey,
+    opperApiKey,
+    openAiModel,
+    opperModel,
+    maxRetries,
+    timeoutSeconds,
+    themeMode,
+    autoProcessShared,
+    structuredOutputMode,
+    debugMode,
+  );
+
+  /// Never includes API keys.
+  @override
+  String toString() {
+    return 'Settings(provider: ${provider.id}, openAiModel: $openAiModel, '
+        'opperModel: $opperModel, maxRetries: $maxRetries, '
+        'timeoutSeconds: $timeoutSeconds, themeMode: ${themeMode.name}, '
+        'autoProcessShared: $autoProcessShared, '
+        'structuredOutputMode: ${structuredOutputMode.name}, '
+        'debugMode: $debugMode, '
+        'hasOpenAiKey: ${openAiApiKey.isNotEmpty}, '
+        'hasOpperKey: ${opperApiKey.isNotEmpty})';
   }
 }

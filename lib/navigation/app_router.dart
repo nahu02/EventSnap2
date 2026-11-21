@@ -1,95 +1,67 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../models/extraction.dart';
 import '../screens/home_screen.dart';
-import '../screens/event_text_input_screen.dart';
-import '../screens/event_details_screen.dart';
+import '../screens/review_screen.dart';
 import '../screens/settings_screen.dart';
 
-/// Application routing configuration
-///
-/// Defines all named routes and their corresponding screens.
-/// Uses Navigator 1.0 for simplicity and compatibility.
+/// How the review screen was left.
+enum ReviewOutcome {
+  /// The events were handed to a calendar app.
+  exported,
+
+  /// The user went back without exporting.
+  discarded,
+}
+
+/// Named routes (Navigator 1.0).
 class AppRouter {
-  // Route names
-  static const String home = '/';
-  static const String eventTextInput = '/event-text-input';
-  static const String eventDetails = '/event-details';
-  static const String settings = '/settings';
+  static const home = '/', review = '/review', settings = '/settings';
 
-  /// Generate routes for the application
-  static Route<dynamic>? generateRoute(RouteSettings settings) {
-    switch (settings.name) {
+  /// `review` expects an [ExtractionResult] as `RouteSettings.arguments`.
+  static Route<dynamic>? generateRoute(RouteSettings s) {
+    switch (s.name) {
       case home:
-        return MaterialPageRoute(
+        return MaterialPageRoute<void>(
           builder: (_) => const HomeScreen(),
-          settings: settings,
+          settings: s,
         );
-
-      case eventTextInput:
-        final args = settings.arguments as String?;
-        return MaterialPageRoute(
-          builder: (_) => EventTextInputScreen(initialText: args),
-          settings: settings,
+      case review:
+        final result = s.arguments;
+        if (result is! ExtractionResult) {
+          return MaterialPageRoute<void>(
+            builder: (_) => const _RouteNotFoundScreen(),
+            settings: s,
+          );
+        }
+        return MaterialPageRoute<ReviewOutcome>(
+          builder: (_) => ReviewScreen(result: result),
+          settings: s,
         );
-
-      case eventDetails:
-        final args = settings.arguments;
-        return MaterialPageRoute(
-          builder: (_) => EventDetailsScreen(
-            initialEvent:
-                args as dynamic, // Will be EventModel when implemented
-          ),
-          settings: settings,
-        );
-
-      case AppRouter.settings:
-        return MaterialPageRoute(
+      case settings:
+        return MaterialPageRoute<void>(
           builder: (_) => const SettingsScreen(),
-          settings: settings,
+          settings: s,
         );
-
       default:
-        return MaterialPageRoute(
+        return MaterialPageRoute<void>(
           builder: (_) => const _RouteNotFoundScreen(),
-          settings: settings,
+          settings: s,
         );
     }
   }
 
-  /// Navigate to home screen
-  static void navigateToHome(BuildContext context) {
-    Navigator.pushNamedAndRemoveUntil(context, home, (route) => false);
+  /// Opens the review screen. Completes with the outcome, or null if the route
+  /// was popped without one (treat as [ReviewOutcome.discarded]).
+  static Future<ReviewOutcome?> openReview(
+    BuildContext c,
+    ExtractionResult result,
+  ) {
+    return Navigator.of(c).pushNamed<ReviewOutcome>(review, arguments: result);
   }
 
-  /// Navigate to event text input screen with optional initial text
-  static void navigateToEventTextInput(
-    BuildContext context, {
-    String? initialText,
-  }) {
-    Navigator.pushNamed(context, eventTextInput, arguments: initialText);
-  }
-
-  /// Navigate to event details screen with optional event data
-  static void navigateToEventDetails(BuildContext context, {dynamic event}) {
-    Navigator.pushNamed(context, eventDetails, arguments: event);
-  }
-
-  /// Navigate to settings screen
-  static void navigateToSettings(BuildContext context) {
-    Navigator.pushNamed(context, settings);
-  }
-
-  /// Go back to previous screen
-  static void goBack(BuildContext context) {
-    Navigator.pop(context);
-  }
-
-  /// Replace current screen with new route
-  static void replaceWith(
-    BuildContext context,
-    String routeName, {
-    Object? arguments,
-  }) {
-    Navigator.pushReplacementNamed(context, routeName, arguments: arguments);
+  static Future<void> openSettings(BuildContext c) async {
+    await Navigator.of(c).pushNamed<void>(settings);
   }
 }
 
@@ -99,24 +71,30 @@ class _RouteNotFoundScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Page Not Found')),
-      body: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.grey),
-            SizedBox(height: 16),
-            Text(
-              'Page Not Found',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'The requested page could not be found.',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-          ],
+      appBar: AppBar(title: const Text('Page not found')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(height: 16),
+              Text('Page not found', style: theme.textTheme.headlineSmall),
+              const SizedBox(height: 8),
+              Text(
+                'The requested page could not be found.',
+                style: theme.textTheme.bodyMedium,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );
