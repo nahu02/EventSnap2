@@ -280,4 +280,92 @@ void main() {
       expect((await service.getSettings()).openAiModel, 'gpt-4.1');
     });
   });
+
+  group('failed secure reads', () {
+    test('never delete or overwrite a key whose read failed', () async {
+      final storage = _FlakyStorage({'openai_api_key': 'sk-keepme123456'})
+        ..failReads = true;
+      final svc = SecureSettingsService(secureStorage: storage);
+      SharedPreferences.setMockInitialValues({});
+      final loaded = await svc.getSettings();
+      expect(loaded.openAiApiKey, isEmpty);
+
+      await svc.updateSettings(loaded.copyWith(maxRetries: 4));
+      expect(storage.data['openai_api_key'], 'sk-keepme123456');
+      expect(storage.deletes, isEmpty);
+
+      // Not cached as valid: a later read retries and succeeds.
+      storage.failReads = false;
+      expect((await svc.getSettings()).openAiApiKey, 'sk-keepme123456');
+    });
+
+    test('explicit clear of a loaded key still deletes it', () async {
+      final storage = _FlakyStorage({'openai_api_key': 'sk-keepme123456'});
+      final svc = SecureSettingsService(secureStorage: storage);
+      SharedPreferences.setMockInitialValues({});
+      final loaded = await svc.getSettings();
+      await svc.updateSettings(loaded.copyWith(openAiApiKey: ''));
+      expect(storage.data.containsKey('openai_api_key'), isFalse);
+    });
+
+    test('unchanged secrets are not rewritten', () async {
+      final storage = _FlakyStorage({'openai_api_key': 'sk-keepme123456'});
+      final svc = SecureSettingsService(secureStorage: storage);
+      SharedPreferences.setMockInitialValues({});
+      final loaded = await svc.getSettings();
+      await svc.updateSettings(loaded.copyWith(maxRetries: 4));
+      expect(storage.writes, isEmpty);
+    });
+  });
+}
+
+class _FlakyStorage extends FlutterSecureStorage {
+  _FlakyStorage(this.data);
+  final Map<String, String> data;
+  bool failReads = false;
+  final List<String> writes = [];
+  final List<String> deletes = [];
+
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    if (failReads) throw Exception('keystore unavailable');
+    return data[key];
+  }
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    writes.add(key);
+    data[key] = value!;
+  }
+
+  @override
+  Future<void> delete({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    deletes.add(key);
+    data.remove(key);
+  }
 }

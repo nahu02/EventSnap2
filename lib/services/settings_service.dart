@@ -129,6 +129,12 @@ class SecureSettingsService implements SettingsService {
   Settings? _cachedSettings;
   bool _cacheValid = false;
 
+  /// Last secret value successfully read from (or written to) secure storage.
+  final Map<String, String> _loadedSecrets = {};
+
+  /// Secret keys whose last read failed (never delete/overwrite blindly).
+  final Set<String> _failedSecretReads = {};
+
   /// Gets the current settings from storage.
   ///
   /// Returns cached settings if available, migrates v1 data, and falls back
@@ -149,7 +155,8 @@ class SecureSettingsService implements SettingsService {
       settings = Settings.defaults();
     }
     _cachedSettings = settings;
-    _cacheValid = true;
+    // A failed secure read must not be cached, so a later call retries.
+    _cacheValid = _failedSecretReads.isEmpty;
     return settings;
   }
 
@@ -161,8 +168,8 @@ class SecureSettingsService implements SettingsService {
     }
 
     try {
-      await _writeSecure(openAiApiKeyKey, settings.openAiApiKey);
-      await _writeSecure(opperApiKeyKey, settings.opperApiKey);
+      await _persistSecret(openAiApiKeyKey, settings.openAiApiKey);
+      await _persistSecret(opperApiKeyKey, settings.opperApiKey);
 
       final prefs = await _preferences();
       await prefs.setString(providerKey, settings.provider.id);
@@ -180,7 +187,7 @@ class SecureSettingsService implements SettingsService {
       await prefs.setInt(settingsVersionKey, currentSettingsVersion);
 
       _cachedSettings = settings;
-      _cacheValid = true;
+      _cacheValid = _failedSecretReads.isEmpty;
     } catch (e) {
       _cacheValid = false;
       throw Exception('Failed to update settings: $e');
@@ -225,6 +232,8 @@ class SecureSettingsService implements SettingsService {
     try {
       if (_secureKeys.contains(key)) {
         await _secureStorage.write(key: key, value: value);
+        _loadedSecrets[key] = value;
+        _failedSecretReads.remove(key);
       } else {
         final prefs = await _preferences();
         final asInt = _intKeys.contains(key) ? int.tryParse(value) : null;
@@ -257,6 +266,8 @@ class SecureSettingsService implements SettingsService {
   void invalidateCache() {
     _cacheValid = false;
     _cachedSettings = null;
+    _loadedSecrets.clear();
+    _failedSecretReads.clear();
   }
 
   /// Cached settings without touching storage (null if not loaded).
@@ -313,19 +324,30 @@ class SecureSettingsService implements SettingsService {
 
   Future<String> _readSecure(String key) async {
     try {
-      return await _secureStorage.read(key: key) ?? '';
+      final value = await _secureStorage.read(key: key) ?? '';
+      _loadedSecrets[key] = value;
+      _failedSecretReads.remove(key);
+      return value;
     } catch (e) {
       debugPrint('SecureSettingsService: failed to read $key: $e');
+      _failedSecretReads.add(key);
       return '';
     }
   }
 
-  Future<void> _writeSecure(String key, String value) async {
+  /// Writes a secret only when it differs from the last loaded value; an
+  /// empty value deletes only when it replaces a loaded non-empty value.
+  Future<void> _persistSecret(String key, String value) async {
+    final loaded = _loadedSecrets[key];
     if (value.isEmpty) {
+      if (loaded == null || loaded.isEmpty) return; // never loaded / nothing
       await _secureStorage.delete(key: key);
     } else {
+      if (loaded == value) return;
       await _secureStorage.write(key: key, value: value);
     }
+    _loadedSecrets[key] = value;
+    _failedSecretReads.remove(key);
   }
 
   static String? _nonBlank(String? value) =>
