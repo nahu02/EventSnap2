@@ -1,5 +1,8 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'dart:convert';
+
 import 'package:event_snap_2/models/event_model.dart';
+import 'package:event_snap_2/models/field_evidence.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('EventModel', () {
@@ -160,7 +163,7 @@ void main() {
           endDateTime: validEndTime,
         );
         // Manually set invalid times to test validation method
-        event.endDateTime = validStartTime.subtract(Duration(hours: 1));
+        event.endDateTime = validStartTime.subtract(const Duration(hours: 1));
 
         final errors = event.validate();
         expect(errors, contains('End time must be after start time'));
@@ -213,7 +216,7 @@ void main() {
           endDateTime: validEndTime,
         );
 
-        expect(event.duration, equals(Duration(hours: 1)));
+        expect(event.duration, equals(const Duration(hours: 1)));
       });
 
       test('formats times correctly', () {
@@ -231,19 +234,19 @@ void main() {
         final event1 = EventModel(
           title: 'Test Event',
           startDateTime: validStartTime,
-          endDateTime: validStartTime.add(Duration(hours: 2)),
+          endDateTime: validStartTime.add(const Duration(hours: 2)),
         );
 
         final event2 = EventModel(
           title: 'Test Event',
           startDateTime: validStartTime,
-          endDateTime: validStartTime.add(Duration(minutes: 30)),
+          endDateTime: validStartTime.add(const Duration(minutes: 30)),
         );
 
         final event3 = EventModel(
           title: 'Test Event',
           startDateTime: validStartTime,
-          endDateTime: validStartTime.add(Duration(days: 1)),
+          endDateTime: validStartTime.add(const Duration(days: 1)),
         );
 
         expect(event1.formattedDuration, equals('2 hours'));
@@ -289,6 +292,281 @@ void main() {
 
         expect(event1, isNot(equals(event2)));
       });
+    });
+    group('Contract v3 additions', () {
+      test('generates a unique id when absent and keeps a given id', () {
+        final a = EventModel(
+          title: 'A',
+          startDateTime: validStartTime,
+          endDateTime: validEndTime,
+        );
+        final b = EventModel(
+          title: 'A',
+          startDateTime: validStartTime,
+          endDateTime: validEndTime,
+        );
+        expect(a.id, isNotEmpty);
+        expect(a.id, isNot(b.id));
+        final c = EventModel(
+          id: 'fixed-id',
+          title: 'A',
+          startDateTime: validStartTime,
+          endDateTime: validEndTime,
+        );
+        expect(c.id, 'fixed-id');
+      });
+
+      test('id is not part of equality', () {
+        final a = EventModel(
+          id: 'one',
+          title: 'A',
+          startDateTime: validStartTime,
+          endDateTime: validEndTime,
+        );
+        final b = EventModel(
+          id: 'two',
+          title: 'A',
+          startDateTime: validStartTime,
+          endDateTime: validEndTime,
+        );
+        expect(a, equals(b));
+        expect(a.hashCode, b.hashCode);
+      });
+
+      test('copyWith preserves id', () {
+        final a = EventModel(
+          title: 'A',
+          startDateTime: validStartTime,
+          endDateTime: validEndTime,
+        );
+        expect(a.copyWith(title: 'B').id, a.id);
+      });
+
+      test('defaults: not all-day, no evidence', () {
+        final e = EventModel(
+          title: 'A',
+          startDateTime: validStartTime,
+          endDateTime: validEndTime,
+        );
+        expect(e.isAllDay, isFalse);
+        expect(e.evidence, isEmpty);
+      });
+
+      test('throws when end equals start', () {
+        expect(
+          () => EventModel(
+            title: 'A',
+            startDateTime: validStartTime,
+            endDateTime: validStartTime,
+          ),
+          throwsArgumentError,
+        );
+      });
+
+      test('stores UTC inputs as local time', () {
+        final utcStart = DateTime.utc(2025, 5, 25, 8);
+        final e = EventModel(
+          title: 'A',
+          startDateTime: utcStart,
+          endDateTime: utcStart.add(const Duration(hours: 1)),
+        );
+        expect(e.startDateTime.isUtc, isFalse);
+        expect(e.endDateTime.isUtc, isFalse);
+        expect(e.startDateTime.isAtSameMomentAs(utcStart), isTrue);
+      });
+
+      test('all-day events are normalised to midnights (exclusive end)', () {
+        final e = EventModel(
+          title: 'Festival',
+          startDateTime: DateTime(2025, 6, 1, 10),
+          endDateTime: DateTime(2025, 6, 3, 18),
+          isAllDay: true,
+        );
+        expect(e.startDateTime, DateTime(2025, 6, 1));
+        expect(e.endDateTime, DateTime(2025, 6, 4));
+        expect(e.lastDay, DateTime(2025, 6, 3));
+        expect(e.isValid, isTrue);
+        expect(e.formattedDuration, '3 days');
+      });
+
+      test('all-day end already at midnight is kept', () {
+        final e = EventModel(
+          title: 'Holiday',
+          startDateTime: DateTime(2025, 6, 1),
+          endDateTime: DateTime(2025, 6, 2),
+          isAllDay: true,
+        );
+        expect(e.endDateTime, DateTime(2025, 6, 2));
+        expect(e.formattedDuration, '1 day');
+        expect(e.formattedStartTime, contains('Jun 01, 2025'));
+        expect(e.formattedEndTime, contains('Jun 01, 2025'));
+        expect(e.formattedTimeRange, contains('all day'));
+      });
+
+      test('single-day all-day event from a timed range covers that day', () {
+        final e = EventModel(
+          title: 'Dentist',
+          startDateTime: DateTime(2025, 6, 1, 10),
+          endDateTime: DateTime(2025, 6, 1, 11),
+          isAllDay: true,
+        );
+        expect(e.startDateTime, DateTime(2025, 6, 1));
+        expect(e.endDateTime, DateTime(2025, 6, 2));
+      });
+
+      test('validate flags all-day events that are not at midnight', () {
+        final e = EventModel(
+          title: 'Holiday',
+          startDateTime: DateTime(2025, 6, 1),
+          endDateTime: DateTime(2025, 6, 2),
+          isAllDay: true,
+        );
+        e.startDateTime = DateTime(2025, 6, 1, 9);
+        expect(
+          e.validate(),
+          contains('All-day events must start and end at midnight'),
+        );
+      });
+
+      test('copyWith can toggle all-day and replace evidence', () {
+        final e = EventModel(
+          title: 'A',
+          startDateTime: validStartTime,
+          endDateTime: validEndTime,
+        );
+        const ev = FieldEvidence(
+          quote: 'May 25',
+          reasoning: 'Date stated explicitly.',
+          confidence: EvidenceConfidence.high,
+        );
+        final allDay = e.copyWith(
+          isAllDay: true,
+          evidence: {EventField.start: ev},
+        );
+        expect(allDay.isAllDay, isTrue);
+        expect(allDay.startDateTime, DateTime(2025, 5, 25));
+        expect(allDay.endDateTime, DateTime(2025, 5, 26));
+        expect(allDay.evidence[EventField.start], ev);
+        expect(allDay.id, e.id);
+      });
+
+      test('evidence participates in equality', () {
+        const ev = FieldEvidence(
+          reasoning: 'Inferred.',
+          confidence: EvidenceConfidence.low,
+        );
+        final a = EventModel(
+          title: 'A',
+          startDateTime: validStartTime,
+          endDateTime: validEndTime,
+          evidence: {EventField.title: ev},
+        );
+        final b = EventModel(
+          title: 'A',
+          startDateTime: validStartTime,
+          endDateTime: validEndTime,
+          evidence: {EventField.title: ev},
+        );
+        final c = EventModel(
+          title: 'A',
+          startDateTime: validStartTime,
+          endDateTime: validEndTime,
+        );
+        expect(a, equals(b));
+        expect(a.hashCode, b.hashCode);
+        expect(a, isNot(equals(c)));
+      });
+
+      test('evidence map is unmodifiable', () {
+        final e = EventModel(
+          title: 'A',
+          startDateTime: validStartTime,
+          endDateTime: validEndTime,
+        );
+        expect(
+          () => e.evidence[EventField.title] = const FieldEvidence(
+            reasoning: 'x',
+            confidence: EvidenceConfidence.low,
+          ),
+          throwsUnsupportedError,
+        );
+      });
+
+      test('full JSON round-trip including id, all-day and evidence', () {
+        final e = EventModel(
+          id: 'evt-1',
+          title: 'Conference',
+          description: 'Day 1; talks, workshops',
+          location: 'Hall A',
+          startDateTime: DateTime(2025, 9, 1),
+          endDateTime: DateTime(2025, 9, 3),
+          isAllDay: true,
+          evidence: const {
+            EventField.title: FieldEvidence(
+              quote: 'Conference',
+              reasoning: 'Named in the first line.',
+              confidence: EvidenceConfidence.high,
+            ),
+            EventField.end: FieldEvidence(
+              reasoning: 'Two-day event per the agenda.',
+              confidence: EvidenceConfidence.medium,
+            ),
+          },
+        );
+        final json = jsonDecode(jsonEncode(e.toJson())) as Map<String, dynamic>;
+        expect(json['isAllDay'], isTrue);
+        expect((json['evidence'] as Map).keys, containsAll(['title', 'end']));
+        final restored = EventModel.fromJson(json);
+        expect(restored, equals(e));
+        expect(restored.id, 'evt-1');
+      });
+
+      test('fromJson accepts the v2 format (no id/isAllDay/evidence)', () {
+        final restored = EventModel.fromJson({
+          'title': 'Old',
+          'startDateTime': validStartTime.toIso8601String(),
+          'endDateTime': validEndTime.toIso8601String(),
+        });
+        expect(restored.id, isNotEmpty);
+        expect(restored.isAllDay, isFalse);
+        expect(restored.evidence, isEmpty);
+      });
+
+      test('fromJson ignores unknown evidence fields', () {
+        final restored = EventModel.fromJson({
+          'title': 'Old',
+          'startDateTime': validStartTime.toIso8601String(),
+          'endDateTime': validEndTime.toIso8601String(),
+          'evidence': {
+            'organizer': {'reasoning': 'x', 'confidence': 'high'},
+            'location': {'reasoning': 'y', 'confidence': 'low'},
+          },
+        });
+        expect(restored.evidence.keys, [EventField.location]);
+      });
+
+      test('fromJson throws FormatException for invalid dates', () {
+        expect(
+          () => EventModel.fromJson({
+            'title': 'Bad',
+            'startDateTime': 'invalid-date',
+            'endDateTime': validEndTime.toIso8601String(),
+          }),
+          throwsFormatException,
+        );
+      });
+
+      test(
+        'formattedTimeRange shows only the end time for same-day events',
+        () {
+          final e = EventModel(
+            title: 'A',
+            startDateTime: DateTime(2020, 5, 25, 10),
+            endDateTime: DateTime(2020, 5, 25, 11, 30),
+          );
+          expect(e.formattedTimeRange, 'May 25, 2020; 10:00 - 11:30');
+        },
+      );
     });
   });
 }

@@ -1,6 +1,7 @@
-import 'package:event_snap_2/models/event_model.dart';
-import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../models/event_model.dart';
 
 class EventForm extends StatefulWidget {
   final EventModel initialEvent;
@@ -60,8 +61,12 @@ class EventFormState extends State<EventForm> {
   }
 
   void _notifyParentOfChanges() {
-    if (widget.onChanged != null) {
-      widget.onChanged!(getCurrentEventModel());
+    final onChanged = widget.onChanged;
+    if (onChanged == null) return;
+    try {
+      onChanged(getCurrentEventModel());
+    } on ArgumentError {
+      // Incomplete input (e.g. empty title); validateForm() reports it.
     }
   }
 
@@ -81,7 +86,6 @@ class EventFormState extends State<EventForm> {
   }
 
   Future<void> _selectDate(BuildContext context, bool isStartDate) async {
-    // Convert stored UTC DateTime to local for the date picker
     final DateTime initialPickerDate =
         (isStartDate ? _startDateTime : _endDateTime).toLocal();
 
@@ -96,28 +100,26 @@ class EventFormState extends State<EventForm> {
         setState(() {
           if (isStartDate) {
             final DateTime currentLocalStartTime = _startDateTime.toLocal();
-            // Create new DateTime in local, then convert to UTC for storage
             _startDateTime = DateTime(
               picked.year,
               picked.month,
               picked.day,
               currentLocalStartTime.hour,
               currentLocalStartTime.minute,
-            ).toUtc();
-            if (_endDateTime.isBefore(_startDateTime)) {
+            );
+            if (!_endDateTime.isAfter(_startDateTime)) {
               _endDateTime = _startDateTime.add(const Duration(hours: 1));
             }
           } else {
             final DateTime currentLocalEndTime = _endDateTime.toLocal();
-            // Create new DateTime in local, then convert to UTC for storage
             _endDateTime = DateTime(
               picked.year,
               picked.month,
               picked.day,
               currentLocalEndTime.hour,
               currentLocalEndTime.minute,
-            ).toUtc();
-            if (_endDateTime.isBefore(_startDateTime)) {
+            );
+            if (!_endDateTime.isAfter(_startDateTime)) {
               // Adjust start time if end time is now before it
               _startDateTime = _endDateTime.subtract(const Duration(hours: 1));
             }
@@ -130,7 +132,6 @@ class EventFormState extends State<EventForm> {
   }
 
   Future<void> _selectTime(BuildContext context, bool isStartDate) async {
-    // Convert stored UTC DateTime to local for the time picker
     final DateTime initialPickerDateTime =
         (isStartDate ? _startDateTime : _endDateTime).toLocal();
     final TimeOfDay initialPickerTimeOfDay = TimeOfDay.fromDateTime(
@@ -146,30 +147,28 @@ class EventFormState extends State<EventForm> {
         setState(() {
           if (isStartDate) {
             final DateTime currentLocalStartDate = _startDateTime.toLocal();
-            // Create new DateTime in local, then convert to UTC for storage
             _startDateTime = DateTime(
               currentLocalStartDate.year,
               currentLocalStartDate.month,
               currentLocalStartDate.day,
               picked.hour,
               picked.minute,
-            ).toUtc();
-            // Ensure end time is after start time (comparison in UTC)
-            if (_endDateTime.isBefore(_startDateTime)) {
+            );
+            // Ensure end time is after start time
+            if (!_endDateTime.isAfter(_startDateTime)) {
               _endDateTime = _startDateTime.add(const Duration(hours: 1));
             }
           } else {
             final DateTime currentLocalEndDate = _endDateTime.toLocal();
-            // Create new DateTime in local, then convert to UTC for storage
             _endDateTime = DateTime(
               currentLocalEndDate.year,
               currentLocalEndDate.month,
               currentLocalEndDate.day,
               picked.hour,
               picked.minute,
-            ).toUtc();
-            // Ensure end time is after start time (comparison in UTC)
-            if (_endDateTime.isBefore(_startDateTime)) {
+            );
+            // Ensure end time is after start time
+            if (!_endDateTime.isAfter(_startDateTime)) {
               // Adjust start time if end time is now before it
               _startDateTime = _endDateTime.subtract(const Duration(hours: 1));
             }
@@ -213,8 +212,8 @@ class EventFormState extends State<EventForm> {
     if (!isValid) {
       currentValidationErrors.add('Please correct the highlighted fields.');
     }
-    if (_endDateTime.isBefore(_startDateTime)) {
-      currentValidationErrors.add('End time cannot be before start time.');
+    if (!_endDateTime.isAfter(_startDateTime)) {
+      currentValidationErrors.add('End time must be after start time.');
     }
 
     if (currentValidationErrors.isNotEmpty) {
@@ -231,7 +230,11 @@ class EventFormState extends State<EventForm> {
   /// Constructs an EventModel from the current form values.
   /// Call validateForm() before this to ensure data is valid.
   EventModel getCurrentEventModel() {
+    final initial = widget.initialEvent;
     return EventModel(
+      id: initial.id,
+      isAllDay: initial.isAllDay,
+      evidence: initial.evidence,
       title: _titleController.text.trim(),
       description: _descriptionController.text.trim().isNotEmpty
           ? _descriptionController.text.trim()

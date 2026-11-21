@@ -1,53 +1,86 @@
-import 'package:flutter/material.dart';
+import 'package:dynamic_color/dynamic_color.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
-import 'themes/app_theme.dart';
-import 'providers/app_state_provider.dart';
-import 'services/settings_service.dart';
+
 import 'navigation/app_router.dart';
+import 'providers/app_state_provider.dart';
+import 'services/ai/ai_service_factory.dart';
+import 'services/ai/legacy/legacy_ai_service_factory.dart';
+import 'services/calendar/calendar_creator.dart';
+import 'services/calendar/icalendar_creator.dart';
+import 'services/platform/image_input_service.dart';
+import 'services/platform/shared_content_source.dart';
+import 'services/platform/text_only_shared_content_source.dart';
+import 'services/platform/unsupported_image_input_service.dart';
+import 'services/settings_service.dart';
+import 'themes/app_theme.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const EventSnapApp());
 }
 
 /// Main application widget
 ///
-/// Sets up the app with state management, theming, and navigation.
+/// Registers the services (screens obtain them with `context.read<…>()`),
+/// the app state, theming and navigation. Every service can be overridden,
+/// e.g. with fakes in widget tests.
 class EventSnapApp extends StatelessWidget {
-  const EventSnapApp({super.key});
+  const EventSnapApp({
+    super.key,
+    this.settingsService,
+    this.aiServiceFactory,
+    this.sharedContentSource,
+    this.imageInputService,
+    this.calendarCreator,
+  });
+
+  final SettingsService? settingsService;
+  final AiServiceFactory? aiServiceFactory;
+  final SharedContentSource? sharedContentSource;
+  final ImageInputService? imageInputService;
+  final CalendarCreator? calendarCreator;
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // Settings service
-        Provider<SettingsService>(create: (_) => SecureSettingsService()),
-
-        // App state provider
+        Provider<SettingsService>(
+          create: (_) => settingsService ?? SecureSettingsService(),
+        ),
+        Provider<AiServiceFactory>(
+          create: (_) => aiServiceFactory ?? LegacyAiServiceFactory(),
+        ),
+        Provider<SharedContentSource>(
+          create: (_) => sharedContentSource ?? TextOnlySharedContentSource(),
+          dispose: (_, source) => source.dispose(),
+        ),
+        Provider<ImageInputService>(
+          create: (_) =>
+              imageInputService ?? const UnsupportedImageInputService(),
+        ),
+        Provider<CalendarCreator>(
+          create: (_) => calendarCreator ?? ICalendarCreator(),
+        ),
         ChangeNotifierProvider<AppStateProvider>(
           create: (context) =>
               AppStateProvider(settingsService: context.read<SettingsService>())
-                ..initialize(), // Initialize app state on startup
+                ..initialize(),
         ),
       ],
-      child: Consumer<AppStateProvider>(
-        builder: (context, appState, child) {
-          return MaterialApp(
-            title: 'EventSnap',
-            debugShowCheckedModeBanner: false,
-
-            // Theme configuration
-            theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: appState.themeMode,
-
-            // Navigation configuration
-            initialRoute: AppRouter.home,
-            onGenerateRoute: AppRouter.generateRoute,
-
-            // Error handling
-            builder: (context, child) {
-              // Handle any global errors or loading states here if needed
-              return child ?? const SizedBox.shrink();
+      child: DynamicColorBuilder(
+        builder: (lightDynamic, darkDynamic) {
+          return Consumer<AppStateProvider>(
+            builder: (context, appState, child) {
+              return MaterialApp(
+                title: 'EventSnap',
+                debugShowCheckedModeBanner: false,
+                theme: AppTheme.light(dynamicScheme: lightDynamic),
+                darkTheme: AppTheme.dark(dynamicScheme: darkDynamic),
+                themeMode: appState.themeMode,
+                initialRoute: AppRouter.home,
+                onGenerateRoute: AppRouter.generateRoute,
+              );
             },
           );
         },

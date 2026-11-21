@@ -1,16 +1,18 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:dart_openai/dart_openai.dart';
-import '../providers/app_state_provider.dart';
-import '../navigation/app_router.dart';
+
+import '../models/ai_provider.dart';
 import '../models/settings.dart';
+import '../providers/app_state_provider.dart';
+import '../services/ai/ai_exceptions.dart';
+import '../services/ai/ai_service_factory.dart';
 
 /// Settings screen for API key configuration and app preferences
 ///
-/// Provides secure input for OpenAI API key, model selection,
-/// and other application settings. Uses SettingsService for
-/// secure storage and persistence.
+/// TEMPORARY v2 layout (OpenAI only) adapted to Settings v2; workstream E
+/// replaces it with the multi-provider settings + model picker. Saving keeps
+/// all settings fields this screen does not edit.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -24,9 +26,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _apiKeyController = TextEditingController();
 
   // State variables
-  String _selectedModel = 'gpt-4.1';
-  int _maxRetries = 3;
-  int _timeoutSeconds = 30;
+  String _selectedModel = AiProvider.openai.defaultModel;
+  int _maxRetries = Settings.defaultMaxRetries;
+  int _timeoutSeconds = Settings.defaultTimeoutSeconds;
   bool _debugMode = false;
   bool _obscureApiKey = true;
   bool _isLoading = false;
@@ -41,11 +43,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Available OpenAI models (fetched dynamically)
   List<String> _availableModels = [
-    'gpt-4.1',
+    'gpt-5-mini',
+    'gpt-5',
     'gpt-4.1-mini',
-    'gpt-4.1-nano',
-    'gpt-4o',
+    'gpt-4.1',
   ]; // Default fallback models
+
+  static const int _minTimeoutSlider = 10;
+  static const int _maxTimeoutSlider = 180;
+  static const int _maxRetriesSlider = 5;
 
   @override
   void initState() {
@@ -64,7 +70,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final appState = context.read<AppStateProvider>();
     final settings = appState.settings;
 
-    if (settings != null) {
+    {
       setState(() {
         _actualApiKey = settings.openAiApiKey;
         _isShowingSavedKey = settings.openAiApiKey.isNotEmpty;
@@ -75,6 +81,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   20 // Show masked version
             : '';
         _selectedModel = settings.openAiModel;
+        if (!_availableModels.contains(_selectedModel)) {
+          _availableModels = [_selectedModel, ..._availableModels];
+        }
         _maxRetries = settings.maxRetries;
         _timeoutSeconds = settings.timeoutSeconds;
         _debugMode = settings.debugMode;
@@ -83,7 +92,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
 
       // Fetch available models if API key is available
-      if (settings.hasApiKey) {
+      if (settings.openAiApiKey.isNotEmpty) {
         _fetchAvailableModels();
       }
     }
@@ -138,8 +147,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _fetchAvailableModels() async {
     final appState = context.read<AppStateProvider>();
     final settings = appState.settings;
+    final catalog = context.read<AiServiceFactory>().modelCatalog;
 
-    if (settings == null || !settings.hasApiKey) {
+    if (settings.openAiApiKey.isEmpty) {
       setState(() {
         _modelLoadError = 'API key required to fetch models';
       });
@@ -152,55 +162,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     try {
-      // Set the API key for OpenAI
-      OpenAI.apiKey = settings.openAiApiKey;
-
-      // Fetch models from OpenAI API
-      final models = await OpenAI.instance.model.list();
-
-      // Filter for GPT models only
-      final gptModels = models
-          .where((model) => model.id.toLowerCase().contains('gpt'))
-          .where((model) {
-            final modelId = model.id.toLowerCase();
-            final excludeKeywords = [
-              'preview',
-              'audio',
-              'vision',
-              'image',
-              'realtime',
-              'embedding',
-              'tts',
-              'transcribe',
-              'instruct',
-            ];
-            return !excludeKeywords.any((keyword) => modelId.contains(keyword));
-          })
-          .map((model) => model.id)
-          .toList();
-
-      // Sort models to prioritize common ones
-      gptModels.sort((a, b) {
-        // Prioritize GPT-4 models, then GPT-3.5, then others
-        final aLower = a.toLowerCase();
-        final bLower = b.toLowerCase();
-
-        if (aLower.contains('gpt-4') && !bLower.contains('gpt-4')) return -1;
-        if (!aLower.contains('gpt-4') && bLower.contains('gpt-4')) return 1;
-        if (aLower.contains('gpt-3.5') && !bLower.contains('gpt-3.5')) {
-          return -1;
-        }
-        if (!aLower.contains('gpt-3.5') && bLower.contains('gpt-3.5')) return 1;
-
-        return a.compareTo(b);
-      });
+      final models = await catalog.listModels(
+        AiProvider.openai,
+        apiKey: settings.openAiApiKey,
+      );
+      final gptModels = models.map((m) => m.id).toList();
+      if (!mounted) return;
 
       if (gptModels.isNotEmpty) {
         setState(() {
           _availableModels = gptModels;
           // Update selected model if it's not in the new list
+          // Keep the user's current model selectable
           if (!_availableModels.contains(_selectedModel)) {
-            _selectedModel = _availableModels.first;
+            _availableModels = [_selectedModel, ..._availableModels];
           }
         });
       } else {
@@ -208,14 +183,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _modelLoadError = 'No GPT models found in your OpenAI account';
         });
       }
-    } catch (e) {
+    } on AiException catch (e) {
+      if (!mounted) return;
       setState(() {
-        _modelLoadError = 'Failed to fetch models: ${e.toString()}';
+        _modelLoadError = 'Failed to fetch models: ${e.userMessage}';
       });
     } finally {
-      setState(() {
-        _isLoadingModels = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoadingModels = false;
+        });
+      }
     }
   }
 
@@ -254,7 +232,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       final appState = context.read<AppStateProvider>();
-      final currentSettings = appState.settings ?? Settings.defaults();
+      final currentSettings = appState.settings;
 
       // Use existing API key if user didn't change it (masked version)
       String apiKey = _apiKeyController.text;
@@ -262,12 +240,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         apiKey = currentSettings.openAiApiKey;
       }
 
-      // Create new settings
-      final newSettings = Settings(
+      // Create new settings (keeps fields this screen does not edit)
+      final newSettings = currentSettings.copyWith(
+        provider: AiProvider.openai,
         openAiApiKey: apiKey.trim(),
-        openAiModel: _availableModels.contains(_selectedModel)
-            ? _selectedModel
-            : _availableModels.first,
+        openAiModel: _selectedModel,
         maxRetries: _maxRetries,
         timeoutSeconds: _timeoutSeconds,
         debugMode: _debugMode,
@@ -286,15 +263,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _loadCurrentSettings();
 
       // Fetch models if API key was updated
-      if (apiKeyChanged && newSettings.hasApiKey) {
+      if (apiKeyChanged && newSettings.openAiApiKey.isNotEmpty) {
         _fetchAvailableModels();
       }
     } catch (e) {
       _showError('Failed to save settings: $e');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -323,9 +302,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirmed == true) {
       setState(() {
         _apiKeyController.text = '';
-        _selectedModel = 'gpt-4.1';
-        _maxRetries = 3;
-        _timeoutSeconds = 30;
+        _selectedModel = AiProvider.openai.defaultModel;
+        _maxRetries = Settings.defaultMaxRetries;
+        _timeoutSeconds = Settings.defaultTimeoutSeconds;
         _debugMode = false;
         _obscureApiKey = true;
         _actualApiKey = '';
@@ -338,8 +317,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Open OpenAI API documentation
   Future<void> _openApiDocumentation() async {
-    const url = 'https://platform.openai.com/api-keys';
-    final uri = Uri.parse(url);
+    final uri = AiProvider.openai.apiKeyHelpUrl;
 
     try {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -353,10 +331,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => AppRouter.goBack(context),
-        ),
         actions: [
           TextButton(onPressed: _resetToDefaults, child: const Text('Reset')),
         ],
@@ -373,19 +347,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.all(12.0),
                 decoration: BoxDecoration(
                   color: _errorMessage != null
-                      ? Colors.red.withAlpha(25)
-                      : Colors.green.withAlpha(25),
+                      ? Theme.of(context).colorScheme.errorContainer
+                      : Theme.of(context).colorScheme.secondaryContainer,
                   borderRadius: BorderRadius.circular(8.0),
-                  border: Border.all(
-                    color: _errorMessage != null ? Colors.red : Colors.green,
-                    width: 1.0,
-                  ),
                 ),
                 child: Row(
                   children: [
                     Icon(
                       _errorMessage != null ? Icons.error : Icons.check_circle,
-                      color: _errorMessage != null ? Colors.red : Colors.green,
+                      color: _errorMessage != null
+                          ? Theme.of(context).colorScheme.onErrorContainer
+                          : Theme.of(context).colorScheme.onSecondaryContainer,
                     ),
                     const SizedBox(width: 8.0),
                     Expanded(
@@ -393,8 +365,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _errorMessage ?? _successMessage ?? '',
                         style: TextStyle(
                           color: _errorMessage != null
-                              ? Colors.red
-                              : Colors.green,
+                              ? Theme.of(context).colorScheme.onErrorContainer
+                              : Theme.of(context)
+                                    .colorScheme
+                                    .onSecondaryContainer,
                         ),
                       ),
                     ),
@@ -433,8 +407,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       ? Icons.check_circle
                                       : Icons.warning,
                                   color: appState.isConfigured
-                                      ? Colors.green
-                                      : Colors.orange,
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).colorScheme.error,
                                 ),
                                 title: Text(
                                   appState.isConfigured
@@ -459,7 +433,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ),
                                 trailing: IconButton(
                                   icon: const Icon(Icons.brightness_4),
-                                  onPressed: () => appState.toggleTheme(),
+                                  tooltip: 'Change theme',
+                                  onPressed: () => _cycleTheme(appState),
                                 ),
                                 contentPadding: EdgeInsets.zero,
                               ),
@@ -542,7 +517,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 children: [
                                   Expanded(
                                     child: DropdownButtonFormField<String>(
-                                      value:
+                                      initialValue:
                                           _availableModels.contains(
                                             _selectedModel,
                                           )
@@ -577,8 +552,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                                 model,
                                                 overflow: TextOverflow.ellipsis,
                                               ),
-                                              if (model == 'gpt-4.1-nano' ||
-                                                  model == 'gpt-4.1-mini')
+                                              if (model ==
+                                                  AiProvider
+                                                      .openai
+                                                      .defaultModel)
                                                 Container(
                                                   margin: const EdgeInsets.only(
                                                     left: 8.0,
@@ -589,9 +566,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                                         vertical: 2.0,
                                                       ),
                                                   decoration: BoxDecoration(
-                                                    color: Theme.of(
-                                                      context,
-                                                    ).colorScheme.primary,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .primary,
                                                     borderRadius:
                                                         BorderRadius.circular(
                                                           4.0,
@@ -600,9 +577,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                                   child: Text(
                                                     'Recommended',
                                                     style: TextStyle(
-                                                      color: Theme.of(
-                                                        context,
-                                                      ).colorScheme.onPrimary,
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .onPrimary,
                                                       fontSize: 10.0,
                                                     ),
                                                   ),
@@ -631,9 +608,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   child: Container(
                                     padding: const EdgeInsets.all(8.0),
                                     decoration: BoxDecoration(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.errorContainer,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .errorContainer,
                                       borderRadius: BorderRadius.circular(4.0),
                                     ),
                                     child: Row(
@@ -641,18 +618,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         Icon(
                                           Icons.warning,
                                           size: 16,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.onErrorContainer,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onErrorContainer,
                                         ),
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
                                             _modelLoadError!,
                                             style: TextStyle(
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.onErrorContainer,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onErrorContainer,
                                               fontSize: 12,
                                             ),
                                           ),
@@ -711,7 +688,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             leading: Icon(Icons.psychology),
                             title: Text('AI Model Information'),
                             subtitle: Text(
-                              'gpt-4.1-mini and nano provide good accuracy for event extraction',
+                              'gpt-5-mini provides good accuracy for event extraction',
                             ),
                             contentPadding: EdgeInsets.zero,
                           ),
@@ -746,9 +723,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   children: [
                                     Text(
                                       'Max Retries: $_maxRetries',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.bodyLarge,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyLarge,
                                     ),
                                     const Text(
                                       'Number of retry attempts for failed API calls',
@@ -759,10 +736,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               SizedBox(
                                 width: 120,
                                 child: Slider(
-                                  value: _maxRetries.toDouble(),
+                                  value: _maxRetries
+                                      .clamp(0, _maxRetriesSlider)
+                                      .toDouble(),
                                   min: 0,
-                                  max: 5,
-                                  divisions: 5,
+                                  max: _maxRetriesSlider.toDouble(),
+                                  divisions: _maxRetriesSlider,
                                   onChanged: (value) {
                                     setState(() {
                                       _maxRetries = value.toInt();
@@ -787,9 +766,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   children: [
                                     Text(
                                       'Timeout: ${_timeoutSeconds}s',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.bodyLarge,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyLarge,
                                     ),
                                     const Text(
                                       'Maximum time to wait for API response',
@@ -800,10 +779,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               SizedBox(
                                 width: 120,
                                 child: Slider(
-                                  value: _timeoutSeconds.toDouble(),
-                                  min: 10,
-                                  max: 60,
-                                  divisions: 10,
+                                  value: _timeoutSeconds
+                                      .clamp(
+                                        _minTimeoutSlider,
+                                        _maxTimeoutSlider,
+                                      )
+                                      .toDouble(),
+                                  min: _minTimeoutSlider.toDouble(),
+                                  max: _maxTimeoutSlider.toDouble(),
+                                  divisions:
+                                      (_maxTimeoutSlider - _minTimeoutSlider) ~/
+                                      10,
                                   onChanged: (value) {
                                     setState(() {
                                       _timeoutSeconds = value.toInt();
@@ -828,7 +814,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             },
                             title: const Text('Debug Mode'),
                             subtitle: const Text(
-                              'Show detailed debug information',
+                              'Show the raw AI response when reviewing events',
                             ),
                             secondary: const Icon(Icons.bug_report),
                             contentPadding: EdgeInsets.zero,
@@ -857,7 +843,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => AppRouter.goBack(context),
+                      onPressed: () => Navigator.of(context).pop(),
                       child: const Text('Cancel'),
                     ),
                   ),
@@ -881,6 +867,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  /// Cycles System → Light → Dark and saves immediately.
+  Future<void> _cycleTheme(AppStateProvider appState) async {
+    final next = switch (appState.settings.themeMode) {
+      AppThemeMode.system => AppThemeMode.light,
+      AppThemeMode.light => AppThemeMode.dark,
+      AppThemeMode.dark => AppThemeMode.system,
+    };
+    try {
+      await appState.updateSettings(
+        appState.settings.copyWith(themeMode: next),
+      );
+    } catch (e) {
+      _showError('Failed to change theme: $e');
+    }
   }
 
   String _getThemeModeText(ThemeMode mode) {

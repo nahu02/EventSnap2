@@ -16,10 +16,10 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 2.1.1
+version: 3.0.0
 
 environment:
-  sdk: ^3.8.0
+  sdk: ^3.14.0
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -33,15 +33,24 @@ dependencies:
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^2.0.0
+  # Temporary: only used by the legacy OpenAI interpreter adapter. Workstream B
+  # replaces it with a thin `http` client and removes this dependency.
   dart_openai: ^5.1.0
-  shared_preferences: ^2.5.3
-  flutter_secure_storage: ^9.2.4
-  path_provider: ^2.1.5
-  ical: ^0.2.2
-  intl: ^0.17.0  # ical depends on 0.17.0, so we must use the same version
-  url_launcher: ^6.3.1
-  provider: ^6.1.5
+  dynamic_color: ^2.1.0
+  # Pinned to 10.x on purpose: 11.x removed the EncryptedSharedPreferences
+  # backend that v2.x (flutter_secure_storage 9) wrote the API key with. 10.x
+  # migrates that data automatically on first access (migrateOnAlgorithmChange).
+  # See docs/v3_plan.md 6.A.2 before bumping to 11.
+  flutter_secure_storage: ^10.3.4
+  http: ^1.6.0
+  image_picker: ^1.2.4
+  intl: ^0.20.3
+  material_ui: ^1.11.1
+  path_provider: ^2.1.6
+  provider: ^6.1.5+1
+  shared_preferences: ^2.5.6
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:
@@ -52,11 +61,11 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
-  mocktail: ^1.0.4
-  flutter_launcher_icons: ^0.14.3
-  flutter_dotenv: ^5.1.0
-  path_provider_platform_interface: ^2.1.2
+  flutter_lints: ^6.0.0
+  mocktail: ^1.0.5
+  flutter_launcher_icons: ^0.14.4
+  flutter_dotenv: ^6.0.2
+  path_provider_platform_interface: ^2.1.3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
