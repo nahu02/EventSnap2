@@ -34,9 +34,6 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^2.0.0
-  # Temporary: only used by the legacy OpenAI interpreter adapter. Workstream B
-  # replaces it with a thin `http` client and removes this dependency.
-  dart_openai: ^5.1.0
   dynamic_color: ^2.1.0
   # Pinned to 10.x on purpose: 11.x removed the EncryptedSharedPreferences
   # backend that v2.x (flutter_secure_storage 9) wrote the API key with. 10.x
