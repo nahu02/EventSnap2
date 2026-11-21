@@ -70,6 +70,21 @@ void main() {
       find.byKey(ValueKey('evidence_line_${field.name}'));
 
   group('rendering', () {
+    testWidgets('title and location wrap up to three lines', (tester) async {
+      await pumpForm(tester, planningEvent());
+      for (final key in const ['event_title_field', 'event_location_field']) {
+        final field = tester.widget<TextField>(
+          find.descendant(
+            of: find.byKey(ValueKey(key)),
+            matching: find.byType(TextField),
+          ),
+        );
+        expect(field.minLines, 1, reason: key);
+        expect(field.maxLines, 3, reason: key);
+        expect(field.textInputAction, TextInputAction.next, reason: key);
+      }
+    });
+
     testWidgets('shows the values and an evidence line per field', (
       tester,
     ) async {

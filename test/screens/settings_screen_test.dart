@@ -453,7 +453,8 @@ void main() {
           openAiModel: 'my-fine-tune',
         ),
       );
-      expect(find.text('my-fine-tune'), findsOneWidget);
+      expect(find.text('My fine tune'), findsOneWidget);
+      expect(find.text('my-fine-tune · Not in list'), findsOneWidget);
       expect(find.text('Structured output unknown'), findsOneWidget);
       expect(find.text('Vision unknown'), findsOneWidget);
       expect(find.textContaining('This model'), findsNothing);
@@ -535,7 +536,12 @@ void main() {
         services.settingsService.settings.opperModel,
         'mistral/mistral-large-3',
       );
-      expect(find.text('mistral/mistral-large-3'), findsOneWidget);
+      expect(find.text('Mistral large 3'), findsOneWidget);
+      expect(
+        find.text('mistral/mistral-large-3 · Not in list'),
+        findsOneWidget,
+      );
+      // The selected-model tile keeps the explicit unknown states.
       expect(find.text('Structured output unknown'), findsOneWidget);
     });
   });

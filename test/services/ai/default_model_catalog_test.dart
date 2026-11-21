@@ -508,22 +508,22 @@ void main() {
       expect(profile, isNotNull);
     });
 
-    test('resolveProfile keeps the stale catalog when the refetch fails', () async {
-      final fresh = await catalogFor(opperServer())
-          .listModels(AiProvider.opper, apiKey: '');
-      expect(fresh, isNotEmpty);
-      now = now.add(const Duration(days: 3));
-      final offline = RecordingClient(
-        (_, _) async => throw http.ClientException('offline'),
-      );
-      final profile = await catalogFor(offline).resolveProfile(
-        AiProvider.opper,
-        'openai/gpt-5-mini',
-        apiKey: '',
-      );
-      expect(offline.requests, isNotEmpty);
-      expect(profile.supportsVision, isTrue);
-    });
+    test(
+      'resolveProfile keeps the stale catalog when the refetch fails',
+      () async {
+        final fresh = await catalogFor(opperServer())
+            .listModels(AiProvider.opper, apiKey: '');
+        expect(fresh, isNotEmpty);
+        now = now.add(const Duration(days: 3));
+        final offline = RecordingClient(
+          (_, _) async => throw http.ClientException('offline'),
+        );
+        final profile = await catalogFor(offline)
+            .resolveProfile(AiProvider.opper, 'openai/gpt-5-mini', apiKey: '');
+        expect(offline.requests, isNotEmpty);
+        expect(profile.supportsVision, isTrue);
+      },
+    );
 
     test('concurrent fetches for different keys are not merged', () async {
       final recording = RecordingClient(

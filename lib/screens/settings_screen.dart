@@ -58,12 +58,20 @@ typedef _ModelRef = ({AiProvider provider, String id});
 
 /// Catalog lookup of the selected model's capabilities.
 class _ModelLookup {
-  _ModelLookup({required this.apiKey, this.loading = true, this.info});
+  _ModelLookup({
+    required this.apiKey,
+    this.loading = true,
+    this.info,
+    this.failed = false,
+  });
 
   /// Key the lookup ran with (OpenAI model lists depend on it).
   final String apiKey;
   final bool loading;
   final AiModelInfo? info;
+
+  /// The lookup itself failed (as opposed to the model not being listed).
+  final bool failed;
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
@@ -279,11 +287,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       selectedModelId: settings.activeModel,
     );
     if (picked == null || !_alive) return;
-    _lookups[(provider: provider, id: picked.id)] = _ModelLookup(
-      apiKey: settings.activeApiKey,
-      loading: false,
-      info: picked,
-    );
+    // A bare custom id carries no metadata: let the catalog lookup decide
+    // whether it is listed (otherwise it would look like a known model).
+    final bare =
+        picked.displayName == picked.id &&
+        picked.vendor == null &&
+        picked.supportsStructuredOutput == null &&
+        picked.supportsVision == null;
+    if (!bare) {
+      _lookups[(provider: provider, id: picked.id)] = _ModelLookup(
+        apiKey: settings.activeApiKey,
+        loading: false,
+        info: picked,
+      );
+    }
     _apply((s) => s.copyWithModel(provider, picked.id));
   }
 
@@ -311,6 +328,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _runLookup(_ModelRef ref, _ModelLookup lookup) async {
     AiModelInfo? info;
+    var failed = false;
     try {
       info = await _catalog.findModel(
         ref.provider,
@@ -319,12 +337,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } catch (_) {
       info = null;
+      failed = true;
     }
     if (!identical(_lookups[ref], lookup)) return;
     final done = _ModelLookup(
       apiKey: lookup.apiKey,
       loading: false,
       info: info,
+      failed: failed,
     );
     if (_alive) {
       setState(() => _lookups[ref] = done);
@@ -506,6 +526,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           modelId: id,
           info: info,
           loading: lookup?.loading ?? false,
+          lookupFailed: lookup?.failed ?? false,
           onTap: _chooseModel,
         ),
         if (warnings.isNotEmpty)

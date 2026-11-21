@@ -38,6 +38,20 @@ abstract final class ModelLabels {
     ].join(' · ');
   }
 
+  /// Friendly name for a model id that isn't in the catalog: the part after
+  /// the last `/`, with dashes and underscores as spaces ("openai/gpt-5-mini"
+  /// becomes "Gpt 5 mini").
+  static String friendlyName(String id) {
+    final trimmed = id.trim();
+    final tail = trimmed.substring(trimmed.lastIndexOf('/') + 1);
+    final words = tail.replaceAll(RegExp(r'[-_]+'), ' ').trim();
+    if (words.isEmpty) return trimmed;
+    return words[0].toUpperCase() + words.substring(1);
+  }
+
+  /// Hint shown for a selected model the catalog doesn't list.
+  static const String notInList = 'Not in list';
+
   static String _humanize(String value) {
     final words = value.replaceAll('_', ' ').trim();
     if (words.isEmpty) return words;

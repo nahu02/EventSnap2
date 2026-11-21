@@ -13,6 +13,7 @@ class SelectedModelTile extends StatelessWidget {
     required this.onTap,
     this.info,
     this.loading = false,
+    this.lookupFailed = false,
   });
 
   /// The model id stored in the settings.
@@ -24,6 +25,9 @@ class SelectedModelTile extends StatelessWidget {
   /// True while [info] is being looked up.
   final bool loading;
 
+  /// The catalog lookup failed, so "not in list" can't be claimed.
+  final bool lookupFailed;
+
   final VoidCallback onTap;
 
   @override
@@ -31,10 +35,15 @@ class SelectedModelTile extends StatelessWidget {
     final theme = Theme.of(context);
     final id = modelId.trim();
     final model = info;
-    final title = id.isEmpty ? 'Choose a model' : (model?.displayName ?? id);
+    final notInList =
+        id.isNotEmpty && model == null && !loading && !lookupFailed;
+    final title = id.isEmpty
+        ? 'Choose a model'
+        : (model?.displayName ??
+              (notInList ? ModelLabels.friendlyName(id) : id));
     final details = model != null
         ? ModelLabels.details(model)
-        : (title != id ? id : '');
+        : (notInList ? '$id · ${ModelLabels.notInList}' : '');
 
     return ListTile(
       leading: const Icon(Icons.auto_awesome_outlined),

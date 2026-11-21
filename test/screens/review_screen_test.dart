@@ -192,6 +192,27 @@ void main() {
       expect(find.byType(ReviewScreen), findsOneWidget);
     });
 
+    testWidgets('bottom bar label stays on one line at large text', (
+      tester,
+    ) async {
+      useTallView(tester, size: const Size(360, 640));
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await openReview(
+        tester,
+        planningResult(events: [planningEvent(), lunchEvent(), lunchEvent()]),
+      );
+      expect(find.text('Add 3 events to calendar'), findsNothing);
+      final label = find.descendant(
+        of: find.byKey(const ValueKey('review_export_button')),
+        matching: find.text('Add to calendar'),
+      );
+      expect(label, findsOneWidget);
+      expect(tester.getSize(label).height, lessThan(2 * 14 * 2 * 1.5));
+      expect(find.text('3 events'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('renders in dark mode at text scale 2 with the 24-hour clock', (
       tester,
     ) async {

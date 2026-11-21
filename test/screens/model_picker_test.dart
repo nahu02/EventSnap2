@@ -213,8 +213,11 @@ void main() {
         selected: 'my/fine-tune',
       );
       expect(find.text('Current model'), findsOneWidget);
-      expect(find.text('my/fine-tune'), findsOneWidget);
-      expect(find.text('Structured output unknown'), findsOneWidget);
+      expect(find.text('Fine tune'), findsOneWidget);
+      expect(find.text('my/fine-tune · Not in list'), findsOneWidget);
+      // Picker rows show no "unknown" pills.
+      expect(find.text('Structured output unknown'), findsNothing);
+      expect(find.text('Vision unknown'), findsNothing);
     });
 
     testWidgets('stays lazy with 1,300 models', (tester) async {
@@ -530,6 +533,27 @@ void main() {
         ).hasBadges,
         isFalse,
       );
+      expect(
+        const CapabilityBadges(
+          structuredOutput: null,
+          vision: null,
+          compact: true,
+        ).hasBadges,
+        isFalse,
+      );
+    });
+
+    testWidgets('compact mode hides unknown capabilities', (tester) async {
+      await pumpBadges(
+        tester,
+        const CapabilityBadges(
+          structuredOutput: null,
+          vision: true,
+          compact: true,
+        ),
+      );
+      expect(find.text('Structured output unknown'), findsNothing);
+      expect(find.text('Vision'), findsOneWidget);
     });
 
     testWidgets('forModel(null) shows unknown capabilities', (tester) async {

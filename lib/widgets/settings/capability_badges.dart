@@ -9,8 +9,9 @@ enum ModelCapability { structuredOutput, vision }
 /// Small pills telling whether a model supports structured output and vision.
 ///
 /// Each capability is tri-state: supported, unsupported or unknown (`null`).
-/// In [compact] mode (dense lists such as the model picker) unsupported
-/// capabilities are left out to reduce noise.
+/// In [compact] mode (dense lists such as the model picker) only supported
+/// capabilities are shown; unsupported and unknown ones are left out to
+/// reduce noise.
 class CapabilityBadges extends StatelessWidget {
   const CapabilityBadges({
     super.key,
@@ -32,8 +33,7 @@ class CapabilityBadges extends StatelessWidget {
   final bool compact;
 
   /// Whether [build] renders at least one badge.
-  bool get hasBadges =>
-      !compact || structuredOutput != false || vision != false;
+  bool get hasBadges => !compact || structuredOutput == true || vision == true;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +42,7 @@ class CapabilityBadges extends StatelessWidget {
         (ModelCapability.structuredOutput, structuredOutput),
         (ModelCapability.vision, vision),
       ])
-        if (!compact || supported != false)
+        if (!compact || supported == true)
           CapabilityBadge(capability: capability, supported: supported),
     ];
     if (badges.isEmpty) return const SizedBox.shrink();

@@ -40,12 +40,19 @@ class SourceCard extends StatefulWidget {
   /// Defaults to [shouldStartExpanded].
   final bool? initiallyExpanded;
 
+  /// Longest text (characters) that still starts expanded.
+  static const int maxExpandedChars = 280;
+
+  /// Most lines a text may have and still start expanded.
+  static const int maxExpandedLines = 5;
+
   /// Short inputs start expanded; long ones show a preview to keep the
   /// events in view.
   static bool shouldStartExpanded(ExtractionInput input) {
     if (!input.hasText) return true;
     final text = input.text.trim();
-    return text.length <= 400 && '\n'.allMatches(text).length < 8;
+    final lines = '\n'.allMatches(text).length + 1;
+    return text.length <= maxExpandedChars && lines <= maxExpandedLines;
   }
 
   @override

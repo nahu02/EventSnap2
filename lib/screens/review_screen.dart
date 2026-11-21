@@ -427,7 +427,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
     final cs = Theme.of(context).colorScheme;
     final count = _items.length;
     final problem = _exportProblem;
-    final label = count > 1
+    // At large text scales the long label would wrap and misalign the icon;
+    // the count stays visible in the app-bar subtitle.
+    final largeText = MediaQuery.textScalerOf(context).scale(10) >= 15;
+    final label = count > 1 && !largeText
         ? 'Add $count events to calendar'
         : 'Add to calendar';
 
@@ -467,7 +470,11 @@ class _ReviewScreenState extends State<ReviewScreen> {
                               ),
                             )
                           : const Icon(Icons.event_available_outlined),
-                      label: Text(label),
+                      label: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),

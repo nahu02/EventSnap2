@@ -286,7 +286,8 @@ class DefaultModelCatalog implements ModelCatalog, ModelProfileResolver {
       final fingerprint = config.modelListRequiresKey
           ? keyFingerprint(key)
           : '';
-      final usable = snapshot != null &&
+      final usable =
+          snapshot != null &&
           snapshot.fingerprint == fingerprint &&
           _isFresh(snapshot);
       if (snapshot != null &&

@@ -185,7 +185,10 @@ class _ModelPickerScreenState extends State<ModelPickerScreen> {
       if (_offerQueryAsId) _CustomEntry(query),
       if (selectedIsCustom && !_hasFilters) ...[
         const _HeaderEntry('Current model'),
-        _ModelEntry(AiModelInfo(id: selected, provider: widget.provider)),
+        _ModelEntry(
+          AiModelInfo(id: selected, provider: widget.provider),
+          notInList: true,
+        ),
       ],
       if (recommended.isNotEmpty) ...[
         const _HeaderEntry('Recommended'),
@@ -477,9 +480,10 @@ class _ModelPickerScreenState extends State<ModelPickerScreen> {
             ),
           ),
         );
-      case _ModelEntry(:final model):
+      case _ModelEntry(:final model, :final notInList):
         return ModelListTile(
           model: model,
+          notInList: notInList,
           selected: model.id == widget.selectedModelId,
           onTap: () => _select(model),
         );
@@ -505,18 +509,27 @@ class ModelListTile extends StatelessWidget {
     required this.model,
     required this.onTap,
     this.selected = false,
+    this.notInList = false,
   });
 
   final AiModelInfo model;
   final bool selected;
+
+  /// The model isn't in the catalog: show a friendly name, the raw id and a
+  /// "Not in list" hint instead of the bare id.
+  final bool notInList;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final details = ModelLabels.details(model);
+    final details = notInList
+        ? '${model.id} · ${ModelLabels.notInList}'
+        : ModelLabels.details(model);
     final badges = CapabilityBadges.forModel(model, compact: true);
     return ListTile(
-      title: Text(model.displayName),
+      title: Text(
+        notInList ? ModelLabels.friendlyName(model.id) : model.displayName,
+      ),
       subtitle: (details.isEmpty && !badges.hasBadges)
           ? null
           : Column(
@@ -546,8 +559,9 @@ class _HeaderEntry extends _Entry {
 }
 
 class _ModelEntry extends _Entry {
-  const _ModelEntry(this.model);
+  const _ModelEntry(this.model, {this.notInList = false});
   final AiModelInfo model;
+  final bool notInList;
 }
 
 /// "Use a custom model id" ([id] null) or "Use “query”" shortcut.
