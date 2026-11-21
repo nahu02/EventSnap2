@@ -1,462 +1,180 @@
-# EventSnap Design Document for Flutter Implementation
+# EventSnap Design Document (v3.0.0)
 
-## Project Overview
+## Overview
 
-EventSnap is a mobile application designed to create calendar events from natural language text. It leverages AI (specifically OpenAI's GPT models) to interpret a user's textual description of an event and transform it into a structured calendar event, which can then be exported as an iCalendar (.ics) file for import into various calendar applications.
+EventSnap is a mobile app that creates calendar events from natural language text and from photos or screenshots. The user supplies text, images, or both, either typed in the app or shared from another app. An AI model extracts zero or more events, each field comes with evidence from the source, the user reviews and edits the events, and the app exports them as RFC 5545 iCalendar (.ics) files.
 
-## Core Features
+Version 3 adds Opper as a second provider, structured output with graceful fallbacks, image input, per-field evidence in the review UI, and a custom iCalendar writer. It also replaces the `dart_openai` SDK and the `ical` package.
 
-1. **Natural Language Processing of Event Text**
-   - Accept text input describing events in natural language
-   - Process text using OpenAI's GPT models to extract event details
-   - Support for event properties: title, description, location, start time, end time
+The detailed implementation plan and the binding interface contracts live in [`docs/v3_plan.md`](docs/v3_plan.md). This document describes the resulting architecture and the reasons behind it.
 
-2. **Event Editing**
-   - Display extracted event details in an editable form
-   - Allow users to modify any incorrectly extracted information
-   - Validate event data (e.g., require title, ensure end time is after start time)
+## Goals
 
-3. **Calendar Integration**
-   - Generate standard iCalendar (.ics) files from event data
-   - Allow adding events to the device's calendar app
-
-4. **Android Share Integration**
-   - Receive shared text from other applications
-   - Process shared text as event descriptions
-
-5. **Settings Management**
-   - Store and retrieve OpenAI API keys
-   - Configure AI model settings
+- Support multiple AI providers (OpenAI and Opper) through one OpenAI-compatible client.
+- Use structured output when the selected model supports it, and degrade gracefully when it does not.
+- Accept images as well as text, from the share sheet and from in-app pickers.
+- Show, for every extracted field, where it came from and how confident the model is.
+- Keep dependencies current and remove abandoned packages.
 
 ## Architecture
 
-The application should be structured using a clean architecture approach with three main modules:
+The app is organised in layers. Models have no UI dependencies. Services talk to the network, the platform and the file system. Providers hold application state. Screens and widgets render state and call services through `provider`.
 
-### 1. UI Module (Flutter Application)
+```
+screens / widgets  ──►  providers (AppStateProvider)  ──►  services
+                                                             ├── ai/         (provider clients, prompts, parsing, model catalog)
+models/  ◄── used by all layers                              ├── calendar/   (iCalendar writer, Android hand-off)
+                                                             └── platform/   (shared content, image input)
+```
 
-**Responsibilities:**
-- Present user interface for event input, display, and editing
-- Handle navigation between screens
-- Receive and process shared text from other apps
-- Manage application settings
-- Coordinate between AI and iCalendar services
+**Rules**
 
-**Key Components:**
-- **Screens:**
-  - `EventTextScreen`: Main screen showing natural language text input field
-  - `EventDetailsScreen`: Screen showing event form and edit capabilities
-  - `SettingsScreen`: Configuration for API keys and model selection
-  - `LoadingScreen`: Display during AI processing or file operations
+- Models must not import `material_ui` or Flutter UI libraries.
+- Screens obtain services with `context.read<…>()`. They never construct services directly. This keeps the UI testable with fakes.
+- Services are defined as abstract interfaces with concrete implementations, so tests can substitute fakes.
 
-- **State Management:**
-  - Manage application state for event data, settings, and processing status
-  - Handle loading states during API calls
+### Layers
 
-- **Platform Integration:**
-  - Implement Android Intent filters to receive shared text
-  - Integrate with device calendar applications
-
-### 2. AI Communication Module
-
-**Responsibilities:**
-- Send natural language text to OpenAI API via the dart_openai SDK
-- Parse API responses into structured event data
-- Handle API errors and retries
-
-**Key Components:**
-- **CalendarEventInterpreter Interface:**
-  - Define contract for event interpretation services
-  - Allow for potential future AI service providers beyond OpenAI
-
-- **OpenAI Implementation using dart_openai:**
-  - Configure the SDK with API keys and model settings
-  - Construct appropriate prompts and messages
-  - Process responses into event objects
-
-### 3. iCalendar Creation Module
-
-**Responsibilities:**
-- Generate valid iCalendar (.ics) files from event data
-- Handle date/time formatting according to iCalendar standards
-
-**Key Components:**
-- **CalendarCreator Interface:**
-  - Define contract for calendar file creation
-  - Allow for potential future calendar format support
-
-- **iCalendar Implementation:**
-  - Format event data according to RFC 5545 (iCalendar spec)
-  - Generate and save .ics files
+| Layer | Responsibility |
+|-------|----------------|
+| `models/` | `AiProvider`, `AiModelInfo`, `Settings`, `EventModel`, `FieldEvidence`, `ExtractionInput`/`ExtractionResult`, `SharedContent` |
+| `services/ai/` | Provider HTTP client, provider configuration, prompt and JSON schema, lenient parser, model catalog, error mapping |
+| `services/calendar/` | `CalendarCreator`, the pure `ICalSerializer`, and the Android method-channel wrapper |
+| `services/platform/` | `SharedContentSource` (Android share intents) and `ImageInputService` (gallery and camera) |
+| `services/settings_service.dart` | Persistence of `Settings` (secure storage for keys, shared preferences for the rest) |
+| `providers/` | `AppStateProvider`: settings, initialisation, theme mode |
+| `navigation/` | `AppRouter`: named routes; `openReview` returns a `ReviewOutcome` |
+| `screens/` | `HomeScreen` (composer), `ReviewScreen`, `SettingsScreen` |
+| `widgets/` | Home, review, settings and event-form widgets |
+| `ui/`, `themes/` | Shared UI helpers, error presentation, Material 3 theme |
 
 ## Data Models
 
-### EventModel
-```dart
-class EventModel {
-  String title;          // Required
-  String? description;   // Optional
-  String? location;      // Optional
-  DateTime startDateTime;
-  DateTime endDateTime;
-}
+- **`AiProvider`** (enum: `openai`, `opper`): storage id, display name, default model, API key help URL and hint. Unknown ids map to `openai`.
+- **`Settings`** (immutable): the selected provider; one API key and one model per provider; retries, timeout, theme mode, auto-process flag, structured output mode (`auto`/`off`) and debug mode. Its `toString()` never includes keys.
+- **`AiModelInfo`**: model id, display name, provider, nullable capability flags (`supportsStructuredOutput`, `supportsVision`; `null` means unknown), vendor, speed, quality, context window and a `recommended` flag.
+- **`EventModel`**: title, optional description and location, local `startDateTime` and `endDateTime`, `isAllDay`, a stable local `id`, and an `evidence` map keyed by `EventField`. For all-day events the start and end are midnights, and the end is exclusive.
+- **`FieldEvidence`**: verbatim `quote` (or `null` when the value was inferred), one-sentence `reasoning`, and `confidence` (`high`, `medium`, `low`).
+- **`ExtractionInput`** (text and images) and **`ExtractionResult`** (events, the original input for the source panel, provider, model, whether structured output was used, warnings, and the raw response for debug mode).
+
+## AI Pipeline
+
+### Provider client
+
+Both providers speak the OpenAI Chat Completions wire format, so one thin `http`-based client serves both. `ProviderConfig` supplies the base URL, the models endpoint, the capability strategy and request quirks. The client is injectable, which allows `MockClient`-based tests. The `dart_openai` SDK was removed because it uses a global static key and has no support for JSON schema or model capabilities.
+
+- **Auth:** bearer token from the active provider's key.
+- **Timeout and cancellation:** the request is bounded by the configured timeout. Cancelling closes the request and yields `AiException(cancelled)`.
+- **Retries:** exponential backoff with jitter, only for network errors, timeouts, HTTP 429 (honouring `Retry-After`) and 5xx responses.
+- **Error mapping:** HTTP status codes and error bodies map to `AiErrorKind` values (`auth`, `modelNotFound`, `rateLimited`, `quotaExceeded`, `unsupportedInput`, `timeout`, and others). Every error reaches the UI as an `AiException`.
+
+### Model catalog and capabilities
+
+- **Opper:** the live model list (`GET /v3/models`, no key required) provides `structured_output` and `vision` capabilities. The list holds roughly 1,280 LLMs, so the picker is searchable.
+- **OpenAI:** `GET /v1/models` returns only IDs. Capabilities come from id heuristics, for example `gpt-4.1*`, `gpt-5*` and `o3*` support structured output. Unknown ids are assumed to support it, and the runtime fallback covers mistakes.
+- Results are cached in memory and persisted for 24 hours.
+
+### Structured output and the downgrade ladder
+
+One unified schema is used for both providers. It contains no `$ref`s, and every object sets `additionalProperties: false` with all keys required:
+
+```
+{ events: [ { title, description|null, location|null, start, end, all_day,
+              evidence: { title|description|location|start|end: { quote|null, reasoning, confidence } } } ] }
 ```
 
-### CalendarEventProperties
-```dart
-class CalendarEventProperties {
-  String? summary;       // Event title
-  String? description;
-  String? location;
-  String? start;         // ISO 8601 formatted datetime
-  String? end;           // ISO 8601 formatted datetime
-}
-```
+The request tries the most capable mode first and falls back when the provider rejects it:
 
-### Settings
-```dart
-class Settings {
-  String openAiApiKey;
-  String openAiModel;    // Default: "gpt-4.1"
-}
-```
+1. `json_schema` (strict), when the mode is `auto` and the model supports it or its support is unknown.
+2. On a 400 that mentions `response_format` or the schema, `json_object` with the schema described in the prompt.
+3. On a 400 for that too, no `response_format` and prompt-only instructions.
 
-## Technical Implementation Details
+The downgrade is remembered per model for the session. The parser is lenient: it strips code fences, extracts the outermost JSON object, accepts a bare array or a single event, and accepts the v2 capitalised keys (`Summary`, `Start`, …). Normalisation converts each event to `EventModel` in local time. A single unrecoverable event is skipped with a warning, and the rest of the result is kept.
 
-### Flutter UI Implementation
+### Prompt
 
-1. **Material Design 3 (MD3) UI**
-   - Use Flutter's Material widgets for consistent design
-   - Implement form validation for event details
+The prompt includes the current date, weekday, time and time zone offset. It sets the extraction rules: a default duration of one hour, all-day handling for events without a time, and a 09:00 default with `low` confidence when only a date is given. It also sets the evidence rules: quotes must be verbatim and at most 15 words, `null` when a value is inferred, and reasoning in one English sentence. The number of events is not fixed, so one request can return several events. Empty results are allowed.
 
-2. **Shared Text Handling**
-   - Register app as share target on Android using `android:exported="true"` and `<intent-filter>` in AndroidManifest.xml
-   - Process incoming shared text in `MainActivity` and pass to Flutter using method channels
+### Images
 
-3. **iCalendar File Handling**
-   - Generate .ics files in app's cache directory
-   - Use platform-specific file sharing mechanisms to open the file with the default calendar app
+- Images are downscaled on device to at most 2048 px on the long edge and sent as base64 data URLs in `image_url` content parts.
+- Gallery and camera images are downscaled by `image_picker`. Shared images are downscaled natively on Android, with EXIF orientation applied and JPEG output.
+- If the selected model is known to lack vision, the request is refused early with `AiException(unsupportedInput)`.
+- The total payload is capped, and the user gets a clear message when it is exceeded.
 
-4. **Settings Persistence**
-   - Use Flutter's `shared_preferences` package for storing settings
-   - Securely store API keys using flutter_secure_storage
+## Review and Evidence
 
-### AI Integration with dart_openai SDK
+The review screen shows the source text, with the active field's quote highlighted, and image thumbnails. Each event is a card containing an editable form. Each field has an evidence line with its quote and reasoning. Low-confidence fields carry a "Check" badge. After a user edits a field, the evidence line is replaced by "Edited by you". Debug mode adds an expandable raw response.
 
-1. **SDK Setup and Configuration**
-   - Add `dart_openai: ^x.y.z` to pubspec.yaml
-   - Configure the SDK with the user's API key:
-     ```dart
-     OpenAI.apiKey = settings.openAiApiKey;
-     ```
+Events can be edited, marked as all-day, and deleted with undo. Changing the start time keeps the duration. "Add to calendar" validates every event, creates the `.ics` file and opens it with a calendar app. If no app can handle the file, the user sees an actionable message.
 
-2. **Chat Completion Implementation**
-   - Use the SDK's structured API to create chat completions:
-     ```dart
-     final chatCompletion = await OpenAI.instance.chat.create(
-       model: settings.openAiModel,
-       messages: [
-         OpenAIChatCompletionChoiceMessageModel(
-           role: OpenAIChatMessageRole.system,
-           content: [
-             OpenAIChatCompletionChoiceMessageContentItemModel.text(
-               systemPrompt,
-             ),
-           ],
-         ),
-         // Add example messages here
-         OpenAIChatCompletionChoiceMessageModel(
-           role: OpenAIChatMessageRole.user,
-           content: [
-             OpenAIChatCompletionChoiceMessageContentItemModel.text(
-               eventText,
-             ),
-           ],
-         ),
-       ],
-     );
-     ```
+## Calendar Export
 
-3. **Prompt Engineering**
-   - Include specific system instructions to generate structured JSON output
-   - Provide examples showing input text and expected JSON output
-   - Design prompts to handle date/time interpretation relative to current date
+- **Serializer:** `ICalSerializer` is a pure function that writes RFC 5545 text. It emits `VCALENDAR` with `VERSION:2.0`, `PRODID`, `CALSCALE:GREGORIAN` and `METHOD:PUBLISH`, and one `VEVENT` per event. Timed events use UTC (`…Z`) values. All-day events use `VALUE=DATE` with an exclusive end. Text is escaped, lines use CRLF, and long lines are folded at 75 octets in a UTF-8-safe way. The UID is `<event.id>@eventsnap.app`.
+- **Creator:** `CalendarCreator` writes the file to the temporary directory and hands it to Android through a `FileProvider` chooser. It returns `false` when no handler exists.
+- The `ical` package was removed because it pins an old `intl` version and predates Dart 3.
 
-### iCalendar Generation
+## Settings and Persistence
 
-1. **iCalendar Format Implementation Using `ical` Package**
-   - Use the `ical` package for handling iCalendar format and generation
-   - Handle timezone information correctly
-   - Include all required iCalendar properties (UID, DTSTAMP, etc.)
-   - Utilize the ICalendar, IEvent, and related classes for structured calendar creation
+- API keys are stored per provider with `flutter_secure_storage`. The `flutter_secure_storage` version is pinned to 10.x with `migrateOnAlgorithmChange`, so that keys saved by v2 are migrated on first access. Version 11 dropped the older storage backend, so the upgrade to 11 has to wait until users have run a 10.x build.
+- Other settings are stored in `shared_preferences`, using a `settings_version` key for migration from v1.
+- `fromJson` is lenient, so bad values fall back to defaults. `updateSettings` persists only settings whose numeric ranges are valid. Blank keys and models are allowed, so the theme can be changed before setup is complete.
 
-2. **File Integration**
-   - Create temporary .ics files in app cache using the serialized output from the ical library
-   - Use platform-specific intent/URL launching to open files with default calendar app
+## Application Flow
 
-## API and Service Interfaces
+1. **Launch:** the app opens to the home composer. If the app is not configured, a setup card links to Settings. If the app was launched through a share, the shared content fills the composer. If auto-processing is on and the app is configured, extraction starts automatically.
+2. **Input:** the user types or pastes text, attaches images, or both.
+3. **Processing:** inputs are disabled, the stage text is shown, and a Cancel action is available.
+4. **Result:** zero events produce an inline message. One or more events open the review screen.
+5. **Export:** the user adds the events to a calendar. On success the composer is cleared and a snackbar confirms.
+6. **Errors:** each `AiErrorKind` maps to a message and an action: open Settings, choose a model, choose a vision model, or retry.
 
-### AI Service Interface
+## Android Platform
 
-```dart
-abstract class CalendarEventInterpreter {
-  Future<CalendarEventProperties> eventToCalendarPropertiesAsync(String eventText);
-}
+- **Manifest:** text `SEND`, `SEND_MULTIPLE`/`SEND` for `image/*`, and the `text/calendar` `VIEW` filter.
+- **`MainActivity`:** reads the text, subject, and up to 4 images from the intent. It copies and downscales images into the app cache, deletes cached images older than 24 hours on startup, and runs the heavy work off the main thread. It delivers the initial content once through `getInitialSharedContent`, and later content through `onSharedContent` when `onNewIntent` fires.
+- **Camera:** uses the system camera intent, so the app does not need the `CAMERA` permission.
+- **Web:** platform channels are unavailable. Services degrade gracefully, for example a no-op share source.
 
-class OpenAiCalendarEventInterpreter implements CalendarEventInterpreter {
-  final String apiKey;
-  String modelName = "gpt-4.1";
-  
-  OpenAiCalendarEventInterpreter(this.apiKey) {
-    OpenAI.apiKey = apiKey;
-  }
-  
-  @override
-  Future<CalendarEventProperties> eventToCalendarPropertiesAsync(String eventText) async {
-    // Implementation using dart_openai SDK
-    final chatCompletion = await OpenAI.instance.chat.create(
-      model: modelName,
-      messages: createMessages(eventText),
-      temperature: 0.2,
-    );
-    
-    // Parse the response
-    final jsonResponse = chatCompletion.choices.first.message.content;
-    return parseJsonToCalendarProperties(jsonResponse);
-  }
-  
-  List<OpenAIChatCompletionChoiceMessageModel> createMessages(String eventText) {
-    // Create system and example messages here
-    // Return structured messages for the chat completion
-  }
-}
-```
+## Error Handling
 
-### iCalendar Service Interface
-
-```dart
-import 'package:ical/ical.dart';
-import 'package:ical/serializer.dart';
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
-
-abstract class CalendarCreator {
-  Future<String> createIcalFile(CalendarEventProperties properties);
-}
-
-class ICalendarCreator implements CalendarCreator {
-  @override
-  Future<String> createIcalFile(CalendarEventProperties properties) async {
-    // Implementation using the ical package
-    final ICalendar calendar = ICalendar();
-    
-    // Create event from properties
-    final event = IEvent(
-      summary: properties.summary,
-      description: properties.description,
-      location: properties.location,
-      start: DateTime.parse(properties.start ?? DateTime.now().toIso8601String()),
-      end: DateTime.parse(properties.end ?? DateTime.now().add(Duration(hours: 1)).toIso8601String()),
-      uid: '${DateTime.now().millisecondsSinceEpoch}@eventsnap.app',
-      status: IEventStatus.CONFIRMED,
-    );
-    
-    // Add the event to calendar
-    calendar.addElement(event);
-    
-    // Serialize to iCalendar format
-    final String icalContent = calendar.serialize();
-    
-    // Save to a temporary file
-    final directory = await getTemporaryDirectory();
-    final filePath = '${directory.path}/event.ics';
-    final file = File(filePath);
-    await file.writeAsString(icalContent);
-    
-    return filePath;
-  }
-}
-```
-
-## User Flow
-
-1. **App Launch**
-   - User opens app directly or shares text to the app from another application
-   - If launched via share, text is automatically processed
-   - If launched directly, user can type in their text, must press submit to begin processing
-
-2. **Event Processing**
-   - App shows loading indicator
-   - Shared or entered text is sent to OpenAI via dart_openai SDK
-   - Response is parsed into event details
-
-3. **Event Review and Edit**
-   - Extracted event details are displayed in editable form
-   - User can modify any fields as needed
-   - Form validates required fields
-
-4. **Calendar Addition**
-   - User taps "Add to Calendar" button
-   - App generates .ics file
-   - System dialog opens to choose calendar app
-   - Event is imported into chosen calendar
-
-5. **Settings Management**
-   - User can access settings screen to configure API keys
-   - Settings are saved securely and persisted between app launches
-
-## Android Platform-Specific Implementation
-
-### AndroidManifest.xml Configuration
-
-```xml
-<manifest ...>
-    <application ...>
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:launchMode="singleTask"
-            ...>
-            
-            <!-- Normal activity intent filters -->
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
-            
-            <!-- Share text intent filter -->
-            <intent-filter>
-                <action android:name="android.intent.action.SEND"/>
-                <action android:name="android.intent.action.VIEW"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <data android:mimeType="text/plain"/>
-            </intent-filter>
-        </activity>
-    </application>
-
-    <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-</manifest>
-```
-
-### Receiving Shared Text in Flutter
-
-Set up method channel to receive shared text from native Android code:
-
-```dart
-const platform = MethodChannel('app.eventsnap/shared_text');
-
-platform.setMethodCallHandler((call) async {
-  if (call.method == 'handleSharedText') {
-    final String sharedText = call.arguments;
-    // Process shared text
-    processEventText(sharedText);
-  }
-});
-```
-
-## OpenAI Prompt Engineering
-
-This is a critical part of the implementation. The OpenAI API needs specific prompting to ensure it returns properly structured event data. Here's the recommended prompt structure to use with the dart_openai SDK:
-
-```dart
-final systemPrompt = """
-You are an assistant helping the user create calendar events.
-The user will tell you about an event they want to add to their calendar and you create the event for them.
-The events must be in a JSON format, and may include a Summary, a Start, an End, a Location and a Description.
-If the JSON includes a Start, it must also include an End.
-The JSON can be incomplete but must be a valid JSON object with at least one key-value pair.
-You only ever respond with valid JSONs. You do not say anything else.
-""";
-
-// Example messages to include in the chat completion request
-final exampleMessages = [
-  OpenAIChatCompletionChoiceMessageModel(
-    role: OpenAIChatMessageRole.user,
-    content: [
-      OpenAIChatCompletionChoiceMessageContentItemModel.text(
-        "Tomorrow evening I have a meeting with John at 5pm at the office",
-      ),
-    ],
-  ),
-  OpenAIChatCompletionChoiceMessageModel(
-    role: OpenAIChatMessageRole.assistant,
-    content: [
-      OpenAIChatCompletionChoiceMessageContentItemModel.text(
-        """
-        {
-          "Summary": "Meeting with John",
-          "Start": "2025-05-22T17:00:00",
-          "End": "2025-05-22T18:00:00",
-          "Location": "Office"
-        }
-        """,
-      ),
-    ],
-  ),
-  // Additional examples...
-];
-```
-
-The examples should use datetime values relative to the current date, and the actual implementation should update these dates dynamically.
-The AI must be provided the current datetime at the time of the user's message.
-
-## Potential Challenges and Solutions
-
-1. **dart_openai SDK Integration**
-   - **Challenge**: Ensuring proper configuration and error handling with the SDK.
-   - **Solution**: Follow the SDK documentation carefully and implement proper exception handling.
-
-2. **Date/Time Interpretation**
-   - **Challenge**: Converting relative time references ("tomorrow", "next week") to actual dates.
-   - **Solution**: Let OpenAI handle this conversion, but verify results for reasonableness.
-
-3. **Calendar Integration Across Platforms**
-   - **Challenge**: Different platforms handle calendar files differently.
-   - **Solution**: Use platform-specific code to open .ics files.
-
-4. **API Key Security**
-   - **Challenge**: Securely storing OpenAI API keys.
-   - **Solution**: Use flutter_secure_storage package and avoid storing keys in plain text.
-
-5. **API Rate Limits and Costs**
-   - **Challenge**: Managing OpenAI API usage within rate limits and budget constraints.
-   - **Solution**: Implement caching for similar requests, add rate limiting, and monitor API usage.
-
-6. **SDK Version Updates**
-   - **Challenge**: Handling changes in the dart_openai SDK API across versions.
-   - **Solution**: Lock the SDK version in pubspec.yaml and test thoroughly when updating.
+- Every failure reaches the presentation layer as `AiException`, with a technical `message` for logs and a provider-agnostic `userMessage`.
+- The UI maps error kinds to actions in one place, `lib/ui/error_presentation.dart`, so the home and settings screens share the same behaviour.
 
 ## Testing Strategy
 
-1. **Unit Tests**
-   - Test the dart_openai SDK integration with mock responses
-   - Test iCalendar file generation
-   - Test event data validation
-
-2. **Integration Tests**
-   - Test end-to-end flow with real AI responses
-   - Test if the model can follow the systemprompt's instructions, produce parseable events
+- **Unit tests:** models, `Settings` migration and validation, `EventModel` (all-day normalisation, validation), `ICalSerializer` (escaping, folding, CRLF, UTC and date values), parser edge cases, the downgrade ladder, error mapping, and retry and backoff with fake delays.
+- **HTTP tests:** `MockClient` checks request shape, including schema present or absent, image parts, authorization headers, base URLs and reasoning parameters. Catalog mapping uses trimmed JSON fixtures.
+- **Widget tests:** composer enable and disable, image chips, share-triggered processing with a fake source, error actions, cancel, evidence rendering, low-confidence badges, delete with undo, all-day toggling, and export success and failure.
+- **Live tests:** smoke tests against the real APIs run only when `OPENAI_API_KEY` and/or `OPPER_API_KEY` is set in the environment.
+- **Shared fakes:** `test/helpers/fakes.dart` provides fake settings service, interpreter, model catalog, factory, share source, image input and calendar creator. `test/helpers/test_app.dart` wires them the same way `main.dart` does.
 
 ## Dependencies
 
-1. **dart_openai**: For OpenAI API integration
-2. **shared_preferences**: For storing settings
-3. **flutter_secure_storage**: For secure API key storage
-4. **intl**: For date formatting
-5. **path_provider**: For file system access
-6. **url_launcher**: For opening the .ics file
-7. **ical**: For generating iCalendar (.ics) files
-8. **provider**: For state management
+| Package | Purpose |
+|---------|---------|
+| `material_ui` | Material 3 widgets (replaces `package:flutter/material.dart`) |
+| `http` | OpenAI-compatible API client |
+| `provider` | State management |
+| `flutter_secure_storage` (10.x) | API key storage |
+| `shared_preferences` | Other settings and model cache |
+| `image_picker` | Gallery and camera input |
+| `dynamic_color` | Dynamic Material colour |
+| `intl` | Locale-aware dates |
+| `url_launcher` | External links |
+| `path_provider` | Temporary directory for `.ics` files |
+| `package_info_plus` | App version in About |
+| `flutter_lints`, `mocktail`, `flutter_dotenv` | Dev: lints, mocks, live-test configuration |
 
-## Conclusion
+Removed in v3: `dart_openai` (replaced by the `http` client) and `ical` (replaced by `ICalSerializer`).
 
-EventSnap in Flutter should leverage Flutter's cross-platform capabilities (although it should focus on Android with the Share API) and the dart_openai SDK for efficient API integration. The architecture emphasizes modularity to allow for future extensions, such as supporting additional AI providers or calendar formats.
+Build toolchain: Flutter 3.50 with Dart 3.14, Android Gradle Plugin 9.3, Kotlin 2.4, Gradle 9.5 and Java 17.
 
-Using the dart_openai SDK provides several advantages over direct HTTP implementation:
-- Typed API for better development experience and fewer runtime errors
-- Built-in error handling and retries
-- Proper request structure and response parsing
-- Easier configuration and management of API parameters
-- Automatic handling of authentication headers
+## Open Items
 
-The key to success is proper implementation of the OpenAI prompt engineering and ensuring robust error handling throughout the app, particularly for API operations and response parsing.
+- Upgrade `flutter_secure_storage` to 11.x in a later release, after users have migrated through a 10.x build.
+- Live provider behaviour can vary across the upstream vendors behind Opper. Schema-validation failures surface as `invalidResponse`, and the downgrade ladder and lenient parser handle them.
+
+## Reference
+
+- [`docs/v3_plan.md`](docs/v3_plan.md): goals, research notes, contracts (section 4), phases, workstream specs (section 6) and risks (section 7).
