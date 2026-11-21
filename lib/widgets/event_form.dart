@@ -1,13 +1,56 @@
-import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../models/event_model.dart';
+import '../models/field_evidence.dart';
+import 'review/evidence_line.dart';
+import 'review/event_formatting.dart';
 
+/// Editable form for one event, with the AI's per-field evidence.
+///
+/// Fields: title, all-day switch, start/end date + time (locale and 24-hour
+/// aware), location and description. Under each field an [EvidenceLine]
+/// explains where the value came from; once the user changes a field it reads
+/// "Edited by you" (compared against [originalEvent]).
+///
+/// Changing the start moves the end by the same amount (the duration is
+/// kept). Valid states are reported through [onChanged].
 class EventForm extends StatefulWidget {
-  final EventModel initialEvent;
-  final void Function(EventModel)? onChanged;
+  const EventForm({
+    super.key,
+    required this.initialEvent,
+    this.originalEvent,
+    this.onChanged,
+    this.onEditedFieldsChanged,
+    this.onFieldFocused,
+    this.onShowInSource,
+    this.sourceText = '',
+    this.hasImages = false,
+  });
 
-  const EventForm({super.key, required this.initialEvent, this.onChanged});
+  /// Values the form starts with.
+  final EventModel initialEvent;
+
+  /// The AI suggestion: source of the evidence and baseline for "Edited by
+  /// you". Defaults to [initialEvent].
+  final EventModel? originalEvent;
+
+  /// Called with the current event whenever the form holds a valid event.
+  final ValueChanged<EventModel>? onChanged;
+
+  /// Called when the set of fields that differ from [originalEvent] changes.
+  final ValueChanged<Set<EventField>>? onEditedFieldsChanged;
+
+  /// Called when a field gains focus or its evidence line is tapped.
+  final ValueChanged<EventField>? onFieldFocused;
+
+  /// Called by an evidence line's "Show in source" action.
+  final ValueChanged<EventField>? onShowInSource;
+
+  /// The original input text (evidence quotes are shown in its context).
+  final String sourceText;
+
+  /// Whether the input had images.
+  final bool hasImages;
 
   @override
   EventFormState createState() => EventFormState();
@@ -16,473 +59,565 @@ class EventForm extends StatefulWidget {
 class EventFormState extends State<EventForm> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
-  late TextEditingController _titleController;
-  late TextEditingController _descriptionController;
-  late TextEditingController _locationController;
+  late final TextEditingController _titleController;
+  late final TextEditingController _descriptionController;
+  late final TextEditingController _locationController;
+  final FocusNode _titleFocus = FocusNode();
+  final FocusNode _descriptionFocus = FocusNode();
+  final FocusNode _locationFocus = FocusNode();
 
-  late DateTime _startDateTime;
-  late DateTime _endDateTime;
+  late DateTime _start;
+  late DateTime _end;
+  late bool _isAllDay;
 
-  String? _errorMessage;
-  List<String> _validationErrors = [];
+  /// Timed start/end before switching to all-day (restored when switching
+  /// back).
+  (DateTime, DateTime)? _timedBeforeAllDay;
+
+  Set<EventField> _reportedEdited = const {};
+
+  EventModel get _original => widget.originalEvent ?? widget.initialEvent;
 
   @override
   void initState() {
     super.initState();
-    _initializeFromEvent(widget.initialEvent);
-
-    // Add listeners to text controllers
-    _titleController.addListener(_handleTextChange);
-    _descriptionController.addListener(_handleTextChange);
-    _locationController.addListener(_handleTextChange);
-  }
-
-  @override
-  void dispose() {
-    // Remove listeners and dispose controllers
-    _titleController.removeListener(_handleTextChange);
-    _descriptionController.removeListener(_handleTextChange);
-    _locationController.removeListener(_handleTextChange);
-
-    _titleController.dispose();
-    _descriptionController.dispose();
-    _locationController.dispose();
-    super.dispose();
-  }
-
-  void _initializeFromEvent(EventModel event) {
+    final event = widget.initialEvent;
     _titleController = TextEditingController(text: event.title);
     _descriptionController = TextEditingController(
       text: event.description ?? '',
     );
     _locationController = TextEditingController(text: event.location ?? '');
-    _startDateTime = event.startDateTime;
-    _endDateTime = event.endDateTime;
-  }
+    _start = event.startDateTime;
+    _end = event.endDateTime;
+    _isAllDay = event.isAllDay;
+    _reportedEdited = editedFields;
 
-  void _notifyParentOfChanges() {
-    final onChanged = widget.onChanged;
-    if (onChanged == null) return;
-    try {
-      onChanged(getCurrentEventModel());
-    } on ArgumentError {
-      // Incomplete input (e.g. empty title); validateForm() reports it.
-    }
-  }
-
-  // Handler for text controller changes
-  void _handleTextChange() {
-    _clearErrors();
-    _notifyParentOfChanges();
-  }
-
-  void _clearErrors() {
-    if (mounted) {
-      setState(() {
-        _errorMessage = null;
-        _validationErrors = [];
-      });
-    }
-  }
-
-  Future<void> _selectDate(BuildContext context, bool isStartDate) async {
-    final DateTime initialPickerDate =
-        (isStartDate ? _startDateTime : _endDateTime).toLocal();
-
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: initialPickerDate,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2101),
+    _titleController.addListener(_handleChanged);
+    _descriptionController.addListener(_handleChanged);
+    _locationController.addListener(_handleChanged);
+    _titleFocus.addListener(() => _handleFocus(_titleFocus, EventField.title));
+    _descriptionFocus.addListener(
+      () => _handleFocus(_descriptionFocus, EventField.description),
     );
-    if (picked != null) {
-      if (mounted) {
-        setState(() {
-          if (isStartDate) {
-            final DateTime currentLocalStartTime = _startDateTime.toLocal();
-            _startDateTime = DateTime(
-              picked.year,
-              picked.month,
-              picked.day,
-              currentLocalStartTime.hour,
-              currentLocalStartTime.minute,
-            );
-            if (!_endDateTime.isAfter(_startDateTime)) {
-              _endDateTime = _startDateTime.add(const Duration(hours: 1));
-            }
-          } else {
-            final DateTime currentLocalEndTime = _endDateTime.toLocal();
-            _endDateTime = DateTime(
-              picked.year,
-              picked.month,
-              picked.day,
-              currentLocalEndTime.hour,
-              currentLocalEndTime.minute,
-            );
-            if (!_endDateTime.isAfter(_startDateTime)) {
-              // Adjust start time if end time is now before it
-              _startDateTime = _endDateTime.subtract(const Duration(hours: 1));
-            }
-          }
-          _clearErrors();
-          _notifyParentOfChanges();
-        });
-      }
-    }
-  }
-
-  Future<void> _selectTime(BuildContext context, bool isStartDate) async {
-    final DateTime initialPickerDateTime =
-        (isStartDate ? _startDateTime : _endDateTime).toLocal();
-    final TimeOfDay initialPickerTimeOfDay = TimeOfDay.fromDateTime(
-      initialPickerDateTime,
-    );
-
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: initialPickerTimeOfDay,
-    );
-    if (picked != null) {
-      if (mounted) {
-        setState(() {
-          if (isStartDate) {
-            final DateTime currentLocalStartDate = _startDateTime.toLocal();
-            _startDateTime = DateTime(
-              currentLocalStartDate.year,
-              currentLocalStartDate.month,
-              currentLocalStartDate.day,
-              picked.hour,
-              picked.minute,
-            );
-            // Ensure end time is after start time
-            if (!_endDateTime.isAfter(_startDateTime)) {
-              _endDateTime = _startDateTime.add(const Duration(hours: 1));
-            }
-          } else {
-            final DateTime currentLocalEndDate = _endDateTime.toLocal();
-            _endDateTime = DateTime(
-              currentLocalEndDate.year,
-              currentLocalEndDate.month,
-              currentLocalEndDate.day,
-              picked.hour,
-              picked.minute,
-            );
-            // Ensure end time is after start time
-            if (!_endDateTime.isAfter(_startDateTime)) {
-              // Adjust start time if end time is now before it
-              _startDateTime = _endDateTime.subtract(const Duration(hours: 1));
-            }
-          }
-          _clearErrors();
-          _notifyParentOfChanges();
-        });
-      }
-    }
-  }
-
-  String _formatDate(DateTime dateTime) {
-    // Convert UTC DateTime to local before formatting
-    return DateFormat.yMMMd().format(dateTime.toLocal());
-  }
-
-  String _formatTime(DateTime dateTime) {
-    // Convert UTC DateTime to local before formatting
-    return DateFormat.jm().format(dateTime.toLocal());
-  }
-
-  String _formatDuration(Duration duration) {
-    if (duration.isNegative) return 'Invalid duration';
-    final days = duration.inDays;
-    final hours = duration.inHours % 24;
-    final minutes = duration.inMinutes % 60;
-    String text = '';
-    if (days > 0) text += '${days}d ';
-    if (hours > 0) text += '${hours}h ';
-    if (minutes > 0) text += '${minutes}m';
-    return text.trim().isEmpty ? '0m' : text.trim();
-  }
-
-  /// Validates the form and returns true if valid, false otherwise.
-  /// Also updates _validationErrors if any.
-  bool validateForm() {
-    _clearErrors();
-    final isValid = _formKey.currentState?.validate() ?? false;
-    final List<String> currentValidationErrors = [];
-
-    if (!isValid) {
-      currentValidationErrors.add('Please correct the highlighted fields.');
-    }
-    if (!_endDateTime.isAfter(_startDateTime)) {
-      currentValidationErrors.add('End time must be after start time.');
-    }
-
-    if (currentValidationErrors.isNotEmpty) {
-      if (mounted) {
-        setState(() {
-          _validationErrors = currentValidationErrors;
-        });
-      }
-      return false;
-    }
-    return true;
-  }
-
-  /// Constructs an EventModel from the current form values.
-  /// Call validateForm() before this to ensure data is valid.
-  EventModel getCurrentEventModel() {
-    final initial = widget.initialEvent;
-    return EventModel(
-      id: initial.id,
-      isAllDay: initial.isAllDay,
-      evidence: initial.evidence,
-      title: _titleController.text.trim(),
-      description: _descriptionController.text.trim().isNotEmpty
-          ? _descriptionController.text.trim()
-          : null,
-      location: _locationController.text.trim().isNotEmpty
-          ? _locationController.text.trim()
-          : null,
-      startDateTime: _startDateTime,
-      endDateTime: _endDateTime,
+    _locationFocus.addListener(
+      () => _handleFocus(_locationFocus, EventField.location),
     );
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_errorMessage != null) _buildErrorCard(),
-            if (_validationErrors.isNotEmpty) _buildValidationErrorsCard(),
-            _buildTitleField(),
-            const SizedBox(height: 16),
-            _buildDescriptionField(),
-            const SizedBox(height: 16),
-            _buildLocationField(),
-            const SizedBox(height: 24),
-            _buildDateTimeSection(),
-            const SizedBox(height: 24),
-          ],
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _locationController.dispose();
+    _titleFocus.dispose();
+    _descriptionFocus.dispose();
+    _locationFocus.dispose();
+    super.dispose();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public API
+
+  /// Start of the event as currently entered.
+  DateTime get start => _start;
+
+  /// End as currently entered (exclusive midnight for all-day events).
+  DateTime get end => _end;
+
+  /// Whether the event is currently all-day.
+  bool get isAllDay => _isAllDay;
+
+  /// Fields whose value differs from the AI suggestion ([originalEvent]).
+  Set<EventField> get editedFields {
+    final o = _original;
+    final allDayChanged = _isAllDay != o.isAllDay;
+    return {
+      if (_titleController.text.trim() != o.title.trim()) EventField.title,
+      if (_blankToNull(_descriptionController.text) !=
+          _blankToNull(o.description))
+        EventField.description,
+      if (_blankToNull(_locationController.text) != _blankToNull(o.location))
+        EventField.location,
+      if (allDayChanged || _start != o.startDateTime) EventField.start,
+      if (allDayChanged || _end != o.endDateTime) EventField.end,
+    };
+  }
+
+  /// Validates the form, showing errors inline. Returns true when valid.
+  bool validateForm() {
+    final fieldsValid = _formKey.currentState?.validate() ?? false;
+    return fieldsValid && _end.isAfter(_start);
+  }
+
+  /// The event as currently entered. Throws [ArgumentError] when the form is
+  /// not valid (call [validateForm] first).
+  EventModel getCurrentEventModel() {
+    final initial = widget.initialEvent;
+    return EventModel(
+      id: initial.id,
+      isAllDay: _isAllDay,
+      evidence: _original.evidence,
+      title: _titleController.text.trim(),
+      description: _blankToNull(_descriptionController.text),
+      location: _blankToNull(_locationController.text),
+      startDateTime: _start,
+      endDateTime: _end,
+    );
+  }
+
+  /// Moves the start to [newStart] and the end by the same amount, keeping
+  /// the duration. For all-day events only the date of [newStart] is used.
+  void setStart(DateTime newStart) {
+    setState(() {
+      if (_isAllDay) {
+        final day = DateTime(newStart.year, newStart.month, newStart.day);
+        final shiftDays = _daysBetween(_start, day);
+        _start = day;
+        _end = DateTime(_end.year, _end.month, _end.day + shiftDays);
+      } else {
+        final delta = newStart.difference(_start);
+        _start = newStart;
+        _end = _end.add(delta);
+      }
+    });
+    _handleChanged();
+  }
+
+  /// Sets the end (exclusive midnight for all-day events). The start is not
+  /// moved; an end before the start is reported as an error.
+  void setEnd(DateTime newEnd) {
+    setState(() => _end = newEnd);
+    _handleChanged();
+  }
+
+  /// Switches between an all-day and a timed event.
+  ///
+  /// Turning all-day on keeps the covered days; turning it off restores the
+  /// previous times (or 09:00 with a one-hour duration).
+  void setAllDay(bool value) {
+    if (value == _isAllDay) return;
+    setState(() {
+      if (value) {
+        _timedBeforeAllDay = (_start, _end);
+        final startDay = DateTime(_start.year, _start.month, _start.day);
+        var endDay = _isMidnight(_end)
+            ? _end
+            : DateTime(_end.year, _end.month, _end.day + 1);
+        if (!endDay.isAfter(startDay)) {
+          endDay = DateTime(startDay.year, startDay.month, startDay.day + 1);
+        }
+        _start = startDay;
+        _end = endDay;
+      } else {
+        final previous = _timedBeforeAllDay;
+        final startTime = previous?.$1 ?? DateTime(2000, 1, 1, 9);
+        final previousDuration = previous?.$2.difference(previous.$1);
+        final lastDay = DateTime(_end.year, _end.month, _end.day - 1);
+        final newStart = DateTime(
+          _start.year,
+          _start.month,
+          _start.day,
+          startTime.hour,
+          startTime.minute,
+        );
+        DateTime newEnd;
+        if (_daysBetween(_start, lastDay) == 0) {
+          final duration =
+              previousDuration != null &&
+                  previousDuration > Duration.zero &&
+                  previousDuration < const Duration(days: 1)
+              ? previousDuration
+              : const Duration(hours: 1);
+          newEnd = newStart.add(duration);
+        } else {
+          final endTime =
+              previous?.$2 ?? newStart.add(const Duration(hours: 1));
+          newEnd = DateTime(
+            lastDay.year,
+            lastDay.month,
+            lastDay.day,
+            endTime.hour,
+            endTime.minute,
+          );
+        }
+        if (!newEnd.isAfter(newStart)) {
+          newEnd = newStart.add(const Duration(hours: 1));
+        }
+        _start = newStart;
+        _end = newEnd;
+      }
+      _isAllDay = value;
+    });
+    _handleChanged();
+  }
+
+  // ---------------------------------------------------------------------------
+
+  void _handleFocus(FocusNode node, EventField field) {
+    if (node.hasFocus) widget.onFieldFocused?.call(field);
+  }
+
+  void _handleChanged() {
+    if (!mounted) return;
+    setState(() {});
+    final edited = editedFields;
+    if (!_sameSet(edited, _reportedEdited)) {
+      _reportedEdited = edited;
+      widget.onEditedFieldsChanged?.call(edited);
+    }
+    final onChanged = widget.onChanged;
+    if (onChanged == null) return;
+    if (_titleController.text.trim().isEmpty || !_end.isAfter(_start)) return;
+    try {
+      onChanged(getCurrentEventModel());
+    } on ArgumentError {
+      // Incomplete input; validateForm() reports it.
+    }
+  }
+
+  Future<void> _pickDate({required bool isStart}) async {
+    widget.onFieldFocused?.call(isStart ? EventField.start : EventField.end);
+    final current = isStart
+        ? _start
+        : (_isAllDay ? DateTime(_end.year, _end.month, _end.day - 1) : _end);
+    final first = DateTime(2000);
+    final last = DateTime(2100, 12, 31);
+    final initial = current.isBefore(first)
+        ? first
+        : current.isAfter(last)
+        ? last
+        : current;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: first,
+      lastDate: last,
+      helpText: isStart ? 'Start date' : 'End date',
+    );
+    if (picked == null || !mounted) return;
+    if (isStart) {
+      setStart(
+        DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          _start.hour,
+          _start.minute,
         ),
+      );
+    } else if (_isAllDay) {
+      setEnd(DateTime(picked.year, picked.month, picked.day + 1));
+    } else {
+      setEnd(
+        DateTime(picked.year, picked.month, picked.day, _end.hour, _end.minute),
+      );
+    }
+  }
+
+  Future<void> _pickTime({required bool isStart}) async {
+    widget.onFieldFocused?.call(isStart ? EventField.start : EventField.end);
+    final current = isStart ? _start : _end;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(current),
+      helpText: isStart ? 'Start time' : 'End time',
+    );
+    if (picked == null || !mounted) return;
+    final value = DateTime(
+      current.year,
+      current.month,
+      current.day,
+      picked.hour,
+      picked.minute,
+    );
+    if (isStart) {
+      setStart(value);
+    } else {
+      setEnd(value);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Build
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = EventFormatter.of(context);
+    final edited = editedFields;
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextFormField(
+            key: const ValueKey('event_title_field'),
+            controller: _titleController,
+            focusNode: _titleFocus,
+            decoration: const InputDecoration(
+              labelText: 'Title',
+              prefixIcon: Icon(Icons.title),
+            ),
+            textCapitalization: TextCapitalization.sentences,
+            textInputAction: TextInputAction.next,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            validator: (value) =>
+                value == null || value.trim().isEmpty ? 'Add a title' : null,
+          ),
+          ..._evidence(EventField.title, edited, fmt),
+          const SizedBox(height: 16),
+          _buildWhen(context, fmt, edited),
+          const SizedBox(height: 16),
+          TextFormField(
+            key: const ValueKey('event_location_field'),
+            controller: _locationController,
+            focusNode: _locationFocus,
+            decoration: const InputDecoration(
+              labelText: 'Location',
+              prefixIcon: Icon(Icons.place_outlined),
+            ),
+            textCapitalization: TextCapitalization.sentences,
+            textInputAction: TextInputAction.next,
+          ),
+          ..._evidence(EventField.location, edited, fmt),
+          const SizedBox(height: 16),
+          TextFormField(
+            key: const ValueKey('event_description_field'),
+            controller: _descriptionController,
+            focusNode: _descriptionFocus,
+            decoration: const InputDecoration(
+              labelText: 'Description',
+              prefixIcon: Icon(Icons.notes_outlined),
+            ),
+            textCapitalization: TextCapitalization.sentences,
+            keyboardType: TextInputType.multiline,
+            minLines: 1,
+            maxLines: 6,
+          ),
+          ..._evidence(EventField.description, edited, fmt),
+        ],
       ),
     );
   }
 
-  Widget _buildErrorCard() {
-    return Card(
-      color: Theme.of(context).colorScheme.errorContainer,
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
+  Widget _buildWhen(
+    BuildContext context,
+    EventFormatter fmt,
+    Set<EventField> edited,
+  ) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final endBeforeStart = !_end.isAfter(_start);
+    final lastDay = DateTime(_end.year, _end.month, _end.day - 1);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
           children: [
-            Icon(
-              Icons.error_outline,
-              color: Theme.of(context).colorScheme.onErrorContainer,
-            ),
-            const SizedBox(width: 12),
+            Icon(Icons.schedule_outlined, size: 20, color: cs.primary),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
-                _errorMessage!,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                ),
+                'When',
+                style: theme.textTheme.titleSmall?.copyWith(color: cs.primary),
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: () => setState(() => _errorMessage = null),
-              color: Theme.of(context).colorScheme.onErrorContainer,
-            ),
+            if (!endBeforeStart)
+              Chip(
+                key: const ValueKey('event_duration_chip'),
+                avatar: const Icon(Icons.timelapse_outlined),
+                label: Text(
+                  fmt.duration(start: _start, end: _end, isAllDay: _isAllDay),
+                ),
+                visualDensity: VisualDensity.compact,
+              ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildValidationErrorsCard() {
-    return Card(
-      color: Theme.of(context).colorScheme.errorContainer,
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.warning_amber_rounded,
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Please fix the following errors:',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onErrorContainer,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ..._validationErrors.map(
-              (error) => Padding(
-                padding: const EdgeInsets.only(left: 32.0, bottom: 4.0),
-                child: Text(
-                  '• $error',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onErrorContainer,
-                  ),
-                ),
-              ),
-            ),
-          ],
+        SwitchListTile(
+          key: const ValueKey('event_all_day_switch'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('All day'),
+          value: _isAllDay,
+          onChanged: setAllDay,
         ),
-      ),
-    );
-  }
-
-  Widget _buildTitleField() {
-    return TextFormField(
-      controller: _titleController,
-      decoration: const InputDecoration(
-        labelText: 'Event Title *',
-        hintText: 'Enter the event title',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.title),
-      ),
-      validator: (value) {
-        if (value == null || value.trim().isEmpty) {
-          return 'Title cannot be empty.';
-        }
-        return null;
-      },
-      textInputAction: TextInputAction.next,
-      // onChanged: (_) => _clearErrors(), // Removed, handled by listener
-    );
-  }
-
-  Widget _buildDescriptionField() {
-    return TextFormField(
-      controller: _descriptionController,
-      decoration: const InputDecoration(
-        labelText: 'Description',
-        hintText: 'Enter the event description (optional)',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.description),
-      ),
-      textInputAction: TextInputAction.next,
-      maxLines: 3,
-      // onChanged: (_) => _clearErrors(), // No longer needed if _handleTextChange calls _clearErrors
-    );
-  }
-
-  Widget _buildLocationField() {
-    return TextFormField(
-      controller: _locationController,
-      decoration: const InputDecoration(
-        labelText: 'Location',
-        hintText: 'Enter event location (optional)',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.location_on),
-      ),
-      textInputAction: TextInputAction.done,
-      // onChanged: (_) => _clearErrors(), // No longer needed if _handleTextChange calls _clearErrors
-    );
-  }
-
-  Widget _buildDateTimeSection() {
-    return Card(
-      elevation: 2,
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Date & Time', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 16),
-            _buildDateTimeField(
-              label: 'Start',
-              dateTime: _startDateTime,
-              onDateChanged: () => _selectDate(context, true),
-              onTimeChanged: () => _selectTime(context, true),
-            ),
-            const SizedBox(height: 16),
-            _buildDateTimeField(
-              label: 'End',
-              dateTime: _endDateTime,
-              onDateChanged: () => _selectDate(context, false),
-              onTimeChanged: () => _selectTime(context, false),
-            ),
-            const SizedBox(height: 12),
-            _buildDurationDisplay(),
-          ],
+        _DateTimeRow(
+          label: 'Starts',
+          dateText: fmt.date(_start),
+          timeText: _isAllDay ? null : fmt.time(_start),
+          dateKey: const ValueKey('event_start_date'),
+          timeKey: const ValueKey('event_start_time'),
+          dateSemantics: 'Start date',
+          timeSemantics: 'Start time',
+          onDate: () => _pickDate(isStart: true),
+          onTime: () => _pickTime(isStart: true),
         ),
-      ),
-    );
-  }
-
-  Widget _buildDateTimeField({
-    required String label,
-    required DateTime dateTime,
-    required VoidCallback onDateChanged,
-    required VoidCallback onTimeChanged,
-  }) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 60,
-          child: Text('$label:', style: Theme.of(context).textTheme.labelLarge),
+        ..._evidence(EventField.start, edited, fmt),
+        const SizedBox(height: 12),
+        _DateTimeRow(
+          label: 'Ends',
+          dateText: fmt.date(_isAllDay ? lastDay : _end),
+          timeText: _isAllDay ? null : fmt.time(_end),
+          dateKey: const ValueKey('event_end_date'),
+          timeKey: const ValueKey('event_end_time'),
+          dateSemantics: 'End date',
+          timeSemantics: 'End time',
+          errorText: endBeforeStart ? 'End must be after start' : null,
+          onDate: () => _pickDate(isStart: false),
+          onTime: () => _pickTime(isStart: false),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: InkWell(
-            onTap: onDateChanged,
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(_formatDate(dateTime)),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: InkWell(
-            onTap: onTimeChanged,
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(_formatTime(dateTime)),
-            ),
-          ),
-        ),
+        ..._evidence(EventField.end, edited, fmt),
       ],
     );
   }
 
-  Widget _buildDurationDisplay() {
-    final duration = _endDateTime.difference(_startDateTime);
-    final durationText = _formatDuration(duration);
+  List<Widget> _evidence(
+    EventField field,
+    Set<EventField> edited,
+    EventFormatter fmt,
+  ) {
+    final evidence = _original.evidence[field];
+    if (evidence == null) return const [];
+    final isEdited = edited.contains(field);
+    // Nothing to justify for an empty field the user did not touch.
+    final hasValue = switch (field) {
+      EventField.title => _titleController.text.trim().isNotEmpty,
+      EventField.description => _descriptionController.text.trim().isNotEmpty,
+      EventField.location => _locationController.text.trim().isNotEmpty,
+      EventField.start || EventField.end => true,
+    };
+    if (!hasValue && !isEdited) return const [];
 
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      alignment: Alignment.centerRight,
-      child: Text(
-        'Duration: $durationText',
-        style: Theme.of(context).textTheme.labelMedium,
+    final o = _original;
+    final suggested = switch (field) {
+      EventField.title => o.title,
+      EventField.description => _blankToNull(o.description) ?? 'none',
+      EventField.location => _blankToNull(o.location) ?? 'none',
+      EventField.start => fmt.startValue(o),
+      EventField.end => fmt.endValue(o),
+    };
+    final onShowInSource = widget.onShowInSource;
+    return [
+      const SizedBox(height: 4),
+      EvidenceLine(
+        key: ValueKey('evidence_line_${field.name}'),
+        field: field,
+        evidence: evidence,
+        edited: isEdited,
+        sourceText: widget.sourceText,
+        hasImages: widget.hasImages,
+        suggestedValue: suggested,
+        onActivate: () => widget.onFieldFocused?.call(field),
+        onShowInSource: onShowInSource == null
+            ? null
+            : () => onShowInSource(field),
       ),
+    ];
+  }
+
+  // ---------------------------------------------------------------------------
+
+  static String? _blankToNull(String? s) {
+    final trimmed = s?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  static bool _isMidnight(DateTime d) =>
+      d.hour == 0 && d.minute == 0 && d.second == 0 && d.millisecond == 0;
+
+  static int _daysBetween(DateTime a, DateTime b) => DateTime.utc(
+    b.year,
+    b.month,
+    b.day,
+  ).difference(DateTime.utc(a.year, a.month, a.day)).inDays;
+
+  static bool _sameSet(Set<EventField> a, Set<EventField> b) =>
+      a.length == b.length && a.containsAll(b);
+}
+
+/// "Starts" / "Ends" label above date and time buttons (wraps at large text
+/// sizes and on narrow screens).
+class _DateTimeRow extends StatelessWidget {
+  const _DateTimeRow({
+    required this.label,
+    required this.dateText,
+    required this.timeText,
+    required this.dateKey,
+    required this.timeKey,
+    required this.dateSemantics,
+    required this.timeSemantics,
+    required this.onDate,
+    required this.onTime,
+    this.errorText,
+  });
+
+  final String label;
+  final String dateText;
+  final String? timeText;
+  final Key dateKey;
+  final Key timeKey;
+  final String dateSemantics;
+  final String timeSemantics;
+  final VoidCallback onDate;
+  final VoidCallback onTime;
+  final String? errorText;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final hasError = errorText != null;
+    final style = hasError
+        ? OutlinedButton.styleFrom(
+            foregroundColor: cs.error,
+            side: BorderSide(color: cs.error),
+          )
+        : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: hasError ? cs.error : cs.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            Semantics(
+              label: dateSemantics,
+              child: OutlinedButton.icon(
+                key: dateKey,
+                style: style,
+                onPressed: onDate,
+                icon: const Icon(Icons.calendar_today_outlined, size: 18),
+                label: Text(dateText),
+              ),
+            ),
+            if (timeText != null)
+              Semantics(
+                label: timeSemantics,
+                child: OutlinedButton.icon(
+                  key: timeKey,
+                  style: style,
+                  onPressed: onTime,
+                  icon: const Icon(Icons.access_time, size: 18),
+                  label: Text(timeText!),
+                ),
+              ),
+          ],
+        ),
+        if (hasError)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              errorText!,
+              style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
+            ),
+          ),
+      ],
     );
   }
 }
