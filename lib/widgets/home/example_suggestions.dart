@@ -37,7 +37,7 @@ class ExampleSuggestions extends StatelessWidget {
                 avatar: const Icon(Icons.auto_awesome_outlined),
                 label: Text(
                   examples[i],
-                  maxLines: 1,
+                  maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                 ),
                 onPressed: () => onSelected(examples[i]),
