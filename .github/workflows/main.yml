@@ -68,8 +68,10 @@ jobs:
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'oracle'
-          java-version: '17'
+          # AGP 9.x lint needs JDK 21 (it calls List.removeLast()); JDK 17
+          # crashes in lintVitalAnalyzeRelease. Matches pr_build.yml.
+          distribution: 'temurin'
+          java-version: '21'
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
