@@ -24,17 +24,32 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- The app has no deep links. Without this, Flutter would turn the
+                 data URI of an opened .ics file into a navigator route. -->
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="false" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- Intent filter for receiving shared text -->
+            <!-- Share targets. The share sheet shows the application label and
+                 icon (EventSnap 2, @mipmap/launcher_icon) for these filters.
+                 Content is delivered to Flutter by SharedContentHandler. -->
+            <!-- Shared text (messages, e-mails, web pages) -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
-            <!-- Intent filter for viewing .ics files -->
+            <!-- Shared images (screenshots, photos of flyers, tickets); up to 4 are used -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <!-- "Open with" for .ics files: the file content is passed on as text -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -68,6 +83,16 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- MainActivity checks whether another app can take the exported
+             .ics file (calendar apps, or share targets as a fallback). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="content" android:mimeType="text/calendar"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND"/>
+            <data android:mimeType="text/calendar"/>
         </intent>
     </queries>
 </manifest>

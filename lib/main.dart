@@ -8,10 +8,10 @@ import 'services/ai/ai_service_factory.dart';
 import 'services/ai/legacy/legacy_ai_service_factory.dart';
 import 'services/calendar/calendar_creator.dart';
 import 'services/calendar/icalendar_creator.dart';
+import 'services/platform/android_shared_content_source.dart';
 import 'services/platform/image_input_service.dart';
+import 'services/platform/picker_image_input_service.dart';
 import 'services/platform/shared_content_source.dart';
-import 'services/platform/text_only_shared_content_source.dart';
-import 'services/platform/unsupported_image_input_service.dart';
 import 'services/settings_service.dart';
 import 'themes/app_theme.dart';
 
@@ -52,12 +52,11 @@ class EventSnapApp extends StatelessWidget {
           create: (_) => aiServiceFactory ?? LegacyAiServiceFactory(),
         ),
         Provider<SharedContentSource>(
-          create: (_) => sharedContentSource ?? TextOnlySharedContentSource(),
+          create: (_) => sharedContentSource ?? AndroidSharedContentSource(),
           dispose: (_, source) => source.dispose(),
         ),
         Provider<ImageInputService>(
-          create: (_) =>
-              imageInputService ?? const UnsupportedImageInputService(),
+          create: (_) => imageInputService ?? PickerImageInputService(),
         ),
         Provider<CalendarCreator>(
           create: (_) => calendarCreator ?? ICalendarCreator(),

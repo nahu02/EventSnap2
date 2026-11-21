@@ -8,6 +8,8 @@ export 'ai/calendar_event_interpreter.dart';
 export 'ai/model_catalog.dart';
 export 'calendar/calendar_creator.dart';
 export 'calendar/icalendar_creator.dart';
+export 'platform/android_shared_content_source.dart';
 export 'platform/image_input_service.dart';
+export 'platform/picker_image_input_service.dart';
 export 'platform/shared_content_source.dart';
 export 'settings_service.dart';
