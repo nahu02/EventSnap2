@@ -21,15 +21,16 @@ void main() {
   test('is strict-mode compatible', () {
     var objects = 0;
     visit(ExtractionSchema.schema, (node) {
-      if (node['type'] == 'object') {
+      final type = node['type'];
+      if (type == 'object' || (type is List && type.contains('object'))) {
         objects++;
         expect(node['additionalProperties'], isFalse, reason: '$node');
         final properties = (node['properties'] as Map).keys.toSet();
         expect((node['required'] as List).toSet(), properties);
       }
     });
-    // root, event, evidence, 5 × field evidence
-    expect(objects, 8);
+    // root, event, evidence, 6 × field evidence, recurrence
+    expect(objects, 10);
     final text = ExtractionSchema.schemaText;
     expect(text, isNot(contains(r'$ref')));
     expect(text, isNot(contains(r'$defs')));
@@ -48,11 +49,39 @@ void main() {
       'start',
       'end',
       'all_day',
+      'recurrence',
     ]);
     expect(properties['description']['type'], ['string', 'null']);
     expect(properties['all_day']['type'], 'boolean');
     final evidence = properties['evidence']['properties'] as Map;
     expect(evidence.keys, ExtractionSchema.evidenceFields);
+    expect(evidence.keys.last, 'recurrence');
+    final recurrence = properties['recurrence'] as Map<String, dynamic>;
+    expect(recurrence['type'], ['object', 'null']);
+    expect((recurrence['properties'] as Map).keys, [
+      'frequency',
+      'interval',
+      'weekdays',
+      'month_day',
+      'weekday_ordinal',
+      'count',
+      'until',
+    ]);
+    expect(recurrence['properties']['frequency']['enum'], [
+      'daily',
+      'weekly',
+      'monthly',
+      'yearly',
+    ]);
+    expect(recurrence['properties']['weekdays']['items']['enum'], [
+      'MO',
+      'TU',
+      'WE',
+      'TH',
+      'FR',
+      'SA',
+      'SU',
+    ]);
     final e = evidence['start'] as Map;
     expect(e['properties']['quote']['type'], ['string', 'null']);
     expect(e['properties']['confidence']['enum'], ['high', 'medium', 'low']);

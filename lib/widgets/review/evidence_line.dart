@@ -11,6 +11,7 @@ extension EventFieldLabel on EventField {
     EventField.location => 'Location',
     EventField.start => 'Start',
     EventField.end => 'End',
+    EventField.recurrence => 'Repeats',
   };
 }
 

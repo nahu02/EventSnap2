@@ -11,5 +11,6 @@ export 'ai_provider.dart';
 export 'event_model.dart';
 export 'extraction.dart';
 export 'field_evidence.dart';
+export 'recurrence.dart';
 export 'settings.dart';
 export 'shared_content.dart';

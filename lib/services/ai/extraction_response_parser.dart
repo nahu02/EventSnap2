@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../../models/event_model.dart';
 import '../../models/field_evidence.dart';
+import '../../models/recurrence.dart';
 import 'ai_exceptions.dart';
 
 /// Events and user-presentable notes parsed from a model response.
@@ -61,6 +62,7 @@ class ExtractionResponseParser {
       'to',
       'until',
     ],
+    EventField.recurrence: ['recurrence', 'repeat', 'repeats', 'rrule'],
   };
   static const List<String> _allDayKeys = [
     'allday',
@@ -87,7 +89,7 @@ class ExtractionResponseParser {
         continue;
       }
       try {
-        final event = _event(_normalizedKeys(item));
+        final event = _event(_normalizedKeys(item), warnings);
         if (event == null) {
           warnings.add('Skipped event ${i + 1}: it has no valid start date.');
         } else {
@@ -192,7 +194,7 @@ class ExtractionResponseParser {
     return null;
   }
 
-  EventModel? _event(Map<String, Object?> json) {
+  EventModel? _event(Map<String, Object?> json, List<String> warnings) {
     final startRaw = _string(_lookup(json, _fieldKeys[EventField.start]!));
     final start = startRaw == null ? null : parseTimestamp(startRaw);
     if (start == null) return null;
@@ -244,6 +246,14 @@ class ExtractionResponseParser {
 
     _downgradeDefaultedEnd(evidence, startTime, endTime, allDay: allDay);
 
+    final recurrence = _recurrence(
+      _lookup(json, _fieldKeys[EventField.recurrence]!),
+      startTime,
+      evidence,
+      warnings,
+      title ?? untitled,
+    );
+
     return EventModel(
       title: title ?? untitled,
       description: description,
@@ -252,7 +262,152 @@ class ExtractionResponseParser {
       endDateTime: endTime,
       isAllDay: allDay,
       evidence: evidence,
+      recurrence: recurrence,
     );
+  }
+
+  static const Map<String, RecurrenceFrequency> _frequencies = {
+    'daily': RecurrenceFrequency.daily,
+    'day': RecurrenceFrequency.daily,
+    'days': RecurrenceFrequency.daily,
+    'weekly': RecurrenceFrequency.weekly,
+    'week': RecurrenceFrequency.weekly,
+    'weeks': RecurrenceFrequency.weekly,
+    'monthly': RecurrenceFrequency.monthly,
+    'month': RecurrenceFrequency.monthly,
+    'months': RecurrenceFrequency.monthly,
+    'yearly': RecurrenceFrequency.yearly,
+    'annually': RecurrenceFrequency.yearly,
+    'year': RecurrenceFrequency.yearly,
+    'years': RecurrenceFrequency.yearly,
+  };
+
+  /// Reads the optional `recurrence` object. A missing or null value means a
+  /// one-off event. An unreadable or invalid rule is dropped (the single event
+  /// is kept) with a warning and a low-confidence evidence note.
+  RecurrenceRule? _recurrence(
+    Object? raw,
+    DateTime start,
+    Map<EventField, FieldEvidence> evidence,
+    List<String> warnings,
+    String title,
+  ) {
+    RecurrenceRule? rule;
+    var invalid = false;
+    if (raw == null || (raw is String && _string(raw) == null)) {
+      // One-off event.
+    } else {
+      rule = raw is Map ? _readRule(_normalizedKeys(raw), start) : null;
+      invalid = rule == null;
+    }
+    if (rule == null && !invalid) {
+      // Nothing repeats: evidence for it would only be noise.
+      evidence.remove(EventField.recurrence);
+      return null;
+    }
+    if (invalid) {
+      final old = evidence[EventField.recurrence];
+      evidence[EventField.recurrence] = FieldEvidence(
+        quote: old?.quote,
+        reasoning:
+            'The repeat pattern could not be read, so it was left out. '
+            'Set it yourself if the event repeats.',
+        confidence: EvidenceConfidence.low,
+      );
+      warnings.add(
+        'Could not read how “$title” repeats; it was added as a single '
+        'event.',
+      );
+      return null;
+    }
+    return rule;
+  }
+
+  RecurrenceRule? _readRule(Map<String, Object?> json, DateTime start) {
+    final freqText = _string(_lookup(json, ['frequency', 'freq']));
+    final frequency = freqText == null
+        ? null
+        : _frequencies[freqText.toLowerCase()];
+    if (frequency == null) return null;
+
+    final intervalRaw = _lookup(json, ['interval']);
+    final interval = intervalRaw == null ? 1 : _int(intervalRaw);
+    final countRaw = _lookup(json, ['count', 'occurrences', 'times']);
+    final count = countRaw == null ? null : _int(countRaw);
+    if (interval == null || (countRaw != null && count == null)) return null;
+
+    final untilRaw = _string(_lookup(json, ['until', 'enddate', 'end']));
+    DateTime? until;
+    if (untilRaw != null) {
+      until = parseTimestamp(untilRaw)?.wallDate;
+      if (until == null) return null;
+    }
+
+    final weekdaysRaw = _lookup(json, [
+      'weekdays',
+      'byday',
+      'byweekdays',
+      'days',
+      'weekday',
+    ]);
+    final weekdays = <int>{};
+    if (weekdaysRaw != null) {
+      final items = weekdaysRaw is List ? weekdaysRaw : [weekdaysRaw];
+      for (final item in items) {
+        final day = item is String ? _weekdayNumber(item) : null;
+        if (day == null) return null;
+        weekdays.add(day);
+      }
+    }
+    final monthDayRaw = _lookup(json, ['monthday', 'bymonthday', 'dayofmonth']);
+    final monthDay = monthDayRaw == null ? null : _int(monthDayRaw);
+    final ordinalRaw = _lookup(json, [
+      'weekdayordinal',
+      'ordinal',
+      'nth',
+      'bysetpos',
+      'setpos',
+    ]);
+    final ordinal = ordinalRaw == null ? null : _int(ordinalRaw);
+    if ((monthDayRaw != null && monthDay == null) ||
+        (ordinalRaw != null && ordinal == null)) {
+      return null;
+    }
+
+    final monthly = frequency == RecurrenceFrequency.monthly;
+    final nth = monthly && ordinal != null && weekdays.length == 1;
+    final rule = RecurrenceRule(
+      frequency: frequency,
+      interval: interval,
+      byWeekdays: frequency == RecurrenceFrequency.weekly || nth
+          ? weekdays
+          : const {},
+      byMonthDay: monthly && !nth ? monthDay : null,
+      weekdayOrdinal: nth ? ordinal : null,
+      count: count,
+      until: until,
+    );
+    return rule.isValid && rule.validate(start: start).isEmpty ? rule : null;
+  }
+
+  static int? _int(Object? value) {
+    if (value is int) return value;
+    if (value is num && value == value.roundToDouble()) return value.toInt();
+    if (value is String) return int.tryParse(value.trim());
+    return null;
+  }
+
+  static int? _weekdayNumber(String raw) {
+    final text = raw.trim().toLowerCase();
+    if (text.length < 2) return null;
+    for (var i = 0; i < _weekdayNames.length; i++) {
+      if (_weekdayNames[i].startsWith(text.substring(0, 2)) &&
+          (text.length == 2 ||
+              _weekdayNames[i].startsWith(text.replaceAll('.', '')))) {
+        return i + 1;
+      }
+    }
+    return null;
   }
 
   /// All-day: `start` = first day, `end` = last day **inclusive** (as asked in

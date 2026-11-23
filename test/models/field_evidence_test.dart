@@ -75,6 +75,7 @@ void main() {
         'location',
         'start',
         'end',
+        'recurrence',
       ]);
     });
   });

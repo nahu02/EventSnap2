@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:event_snap_2/models/field_evidence.dart';
+import 'package:event_snap_2/models/recurrence.dart';
 import 'package:event_snap_2/services/ai/ai_exceptions.dart';
 import 'package:event_snap_2/services/ai/extraction_response_parser.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -477,6 +478,171 @@ void main() {
       expect(parser.parseTimestamp('2026-02-29'), isNull);
       expect(parser.parseTimestamp('2028-02-29')?.dateOnly, isTrue);
       expect(parser.parseTimestamp('2026-11-27T10:61:00'), isNull);
+    });
+  });
+
+  group('recurrence', () {
+    // 2026-12-01 is a Tuesday.
+    Map<String, dynamic> recurring(Object? recurrence, {String? start}) =>
+        wireEvent(
+          start: start ?? '2026-12-01T19:00:00+01:00',
+          end: '2026-12-01T20:00:00+01:00',
+          recurrence: recurrence,
+          recurrenceEvidence: wireEvidence(
+            'every Tuesday',
+            reasoning: 'Stated.',
+            confidence: 'high',
+          ),
+        );
+
+    ParsedExtraction parseOne(Object? recurrence, {String? start}) =>
+        parse(eventsJson([recurring(recurrence, start: start)]));
+
+    Map<String, dynamic> rule({
+      String frequency = 'weekly',
+      Object? interval,
+      Object? weekdays,
+      Object? monthDay,
+      Object? ordinal,
+      Object? count,
+      Object? until,
+    }) => {
+      'frequency': frequency,
+      'interval': interval,
+      'weekdays': weekdays,
+      'month_day': monthDay,
+      'weekday_ordinal': ordinal,
+      'count': count,
+      'until': until,
+    };
+
+    test('null recurrence is a one-off event and drops its evidence', () {
+      final result = parse(eventsJson([wireEvent()]));
+      expect(result.warnings, isEmpty);
+      expect(result.events.single.recurrence, isNull);
+      expect(
+        result.events.single.evidence.containsKey(EventField.recurrence),
+        isFalse,
+      );
+    });
+
+    test('weekly on Monday and Wednesday', () {
+      final result = parseOne(rule(weekdays: ['MO', 'WE']));
+      final r = result.events.single.recurrence!;
+      expect(r.frequency, RecurrenceFrequency.weekly);
+      expect(r.byWeekdays, {DateTime.monday, DateTime.wednesday});
+      expect(r.interval, 1);
+      expect(r.hasEnd, isFalse);
+      expect(
+        result.events.single.evidence[EventField.recurrence]?.quote,
+        'every Tuesday',
+      );
+      expect(result.warnings, isEmpty);
+    });
+
+    test('biweekly with an until date', () {
+      final r = parseOne(
+        rule(interval: 2, weekdays: ['TU'], until: '2026-12-15'),
+      ).events.single.recurrence!;
+      expect(r.interval, 2);
+      expect(r.until, DateTime(2026, 12, 15));
+      expect(r.count, isNull);
+    });
+
+    test('daily until a date', () {
+      final r = parseOne(rule(frequency: 'daily', until: '2026-12-04'))
+          .events
+          .single
+          .recurrence!;
+      expect(r.frequency, RecurrenceFrequency.daily);
+      expect(r.until, DateTime(2026, 12, 4));
+    });
+
+    test('monthly on the first Tuesday', () {
+      final r = parseOne(
+        rule(frequency: 'monthly', weekdays: ['TU'], ordinal: 1),
+      ).events.single.recurrence!;
+      expect(r.isNthWeekday, isTrue);
+      expect(r.weekdayOrdinal, 1);
+      expect(r.byWeekdays, {DateTime.tuesday});
+      expect(r.byMonthDay, isNull);
+    });
+
+    test('monthly on the last Friday and on the 15th', () {
+      final last = parseOne(
+        rule(frequency: 'monthly', weekdays: ['FR'], ordinal: -1),
+      ).events.single.recurrence!;
+      expect(last.weekdayOrdinal, -1);
+      final day = parseOne(rule(frequency: 'monthly', monthDay: 15))
+          .events
+          .single
+          .recurrence!;
+      expect(day.byMonthDay, 15);
+      expect(day.weekdayOrdinal, isNull);
+    });
+
+    test('yearly and count', () {
+      final yearly = parseOne(rule(frequency: 'yearly')).events.single;
+      expect(yearly.recurrence!.frequency, RecurrenceFrequency.yearly);
+      final counted = parseOne(rule(weekdays: ['TU'], count: 10))
+          .events
+          .single
+          .recurrence!;
+      expect(counted.count, 10);
+    });
+
+    test('is lenient about key names, weekday names and number types', () {
+      final r = parseOne({
+        'Freq': 'WEEKLY',
+        'Interval': '2',
+        'byDay': ['Mon', 'wednesday', 'fr'],
+        'Count': 6.0,
+      }).events.single.recurrence!;
+      expect(r.frequency, RecurrenceFrequency.weekly);
+      expect(r.interval, 2);
+      expect(r.byWeekdays, {1, 3, 5});
+      expect(r.count, 6);
+    });
+
+    test('ignores weekdays on a daily rule instead of failing', () {
+      final r = parseOne(rule(frequency: 'daily', weekdays: ['MO']))
+          .events
+          .single
+          .recurrence!;
+      expect(r.byWeekdays, isEmpty);
+    });
+
+    group('invalid recurrence is dropped, the event is kept', () {
+      void expectDropped(Object? recurrence) {
+        final result = parseOne(recurrence);
+        final e = result.events.single;
+        expect(e.recurrence, isNull);
+        expect(e.title, 'Dinner with Anna');
+        expect(result.warnings, hasLength(1));
+        expect(result.warnings.single, contains('Dinner with Anna'));
+        final evidence = e.evidence[EventField.recurrence]!;
+        expect(evidence.confidence, EvidenceConfidence.low);
+        expect(evidence.reasoning, contains('could not be read'));
+      }
+
+      test('unknown frequency', () => expectDropped(rule(frequency: 'hourly')));
+      test('interval 0', () => expectDropped(rule(interval: 0)));
+      test('count and until together', () {
+        expectDropped(rule(count: 3, until: '2026-12-20'));
+      });
+      test('until before the start', () {
+        expectDropped(rule(until: '2026-11-30'));
+      });
+      test('count 0', () => expectDropped(rule(count: 0)));
+      test('unreadable until', () => expectDropped(rule(until: 'Christmas')));
+      test('bad weekday', () => expectDropped(rule(weekdays: ['XX'])));
+      test('bad ordinal', () {
+        expectDropped(rule(frequency: 'monthly', weekdays: ['TU'], ordinal: 6));
+      });
+      test('month day out of range', () {
+        expectDropped(rule(frequency: 'monthly', monthDay: 40));
+      });
+      test('not an object', () => expectDropped('every week'));
     });
   });
 }

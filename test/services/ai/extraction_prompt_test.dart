@@ -50,6 +50,13 @@ void main() {
       expect(prompt, contains('inclusive'));
       expect(prompt, contains('max ~8 words'));
       expect(prompt, contains('{"events": []}'));
+      // Recurrence rules.
+      expect(prompt, contains('recurrence'));
+      expect(prompt, contains('FIRST occurrence'));
+      expect(prompt, contains('every other week'));
+      expect(prompt, contains('weekday_ordinal'));
+      expect(prompt, contains('month_day'));
+      expect(prompt, contains('count or until'));
       // Required by OpenAI's JSON mode.
       expect(prompt, contains('JSON'));
       expect(prompt, isNot(contains('"additionalProperties"')));

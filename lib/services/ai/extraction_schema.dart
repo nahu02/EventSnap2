@@ -22,7 +22,71 @@ class ExtractionSchema {
     'location',
     'start',
     'end',
+    'recurrence',
   ];
+
+  /// Weekday codes used by `recurrence.weekdays`.
+  static const List<String> weekdayCodes = [
+    'MO',
+    'TU',
+    'WE',
+    'TH',
+    'FR',
+    'SA',
+    'SU',
+  ];
+
+  static Map<String, dynamic> get _recurrence => {
+    'type': ['object', 'null'],
+    'description':
+        'How the event repeats, or null for a one-off event. The event '
+        'start/end are the FIRST occurrence.',
+    'properties': {
+      'frequency': {
+        'type': 'string',
+        'enum': ['daily', 'weekly', 'monthly', 'yearly'],
+      },
+      'interval': {
+        'type': ['integer', 'null'],
+        'description': 'Every N periods (2 = every other); null means 1.',
+      },
+      'weekdays': {
+        'type': ['array', 'null'],
+        'description':
+            'Weekly: the days of the week. Monthly "nth weekday": exactly '
+            'one day. Otherwise null.',
+        'items': {'type': 'string', 'enum': weekdayCodes},
+      },
+      'month_day': {
+        'type': ['integer', 'null'],
+        'description': 'Monthly on a day number (1-31), else null.',
+      },
+      'weekday_ordinal': {
+        'type': ['integer', 'null'],
+        'description':
+            'Monthly "nth weekday": 1-4, or -1 for the last (with one '
+            'weekday in weekdays), else null.',
+      },
+      'count': {
+        'type': ['integer', 'null'],
+        'description': 'Total number of occurrences, else null.',
+      },
+      'until': {
+        'type': ['string', 'null'],
+        'description': 'Last possible date, YYYY-MM-DD (inclusive), else null.',
+      },
+    },
+    'required': [
+      'frequency',
+      'interval',
+      'weekdays',
+      'month_day',
+      'weekday_ordinal',
+      'count',
+      'until',
+    ],
+    'additionalProperties': false,
+  };
 
   static Map<String, dynamic> _evidence(String field) => {
     'type': 'object',
@@ -95,6 +159,7 @@ class ExtractionSchema {
               'type': 'boolean',
               'description': 'True for date-only events spanning whole days.',
             },
+            'recurrence': _recurrence,
           },
           'required': [
             'evidence',
@@ -104,6 +169,7 @@ class ExtractionSchema {
             'start',
             'end',
             'all_day',
+            'recurrence',
           ],
           'additionalProperties': false,
         },
