@@ -36,6 +36,10 @@ class Settings {
   /// Start extraction automatically when content is shared into the app.
   final bool autoProcessShared;
 
+  /// Start extraction automatically after a "Snap screen" shortcut. Off by
+  /// default: the screenshot is sent to the AI provider without confirmation.
+  final bool autoProcessSnaps;
+
   final StructuredOutputMode structuredOutputMode;
 
   /// Shows the raw AI response on the review screen.
@@ -53,6 +57,7 @@ class Settings {
     this.timeoutSeconds = defaultTimeoutSeconds,
     this.themeMode = AppThemeMode.system,
     this.autoProcessShared = true,
+    this.autoProcessSnaps = false,
     this.structuredOutputMode = StructuredOutputMode.auto,
     this.debugMode = false,
   });
@@ -153,6 +158,7 @@ class Settings {
     int? timeoutSeconds,
     AppThemeMode? themeMode,
     bool? autoProcessShared,
+    bool? autoProcessSnaps,
     StructuredOutputMode? structuredOutputMode,
     bool? debugMode,
   }) {
@@ -166,6 +172,7 @@ class Settings {
       timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
       themeMode: themeMode ?? this.themeMode,
       autoProcessShared: autoProcessShared ?? this.autoProcessShared,
+      autoProcessSnaps: autoProcessSnaps ?? this.autoProcessSnaps,
       structuredOutputMode: structuredOutputMode ?? this.structuredOutputMode,
       debugMode: debugMode ?? this.debugMode,
     );
@@ -193,6 +200,7 @@ class Settings {
     'timeoutSeconds': timeoutSeconds,
     'themeMode': themeMode.name,
     'autoProcessShared': autoProcessShared,
+    'autoProcessSnaps': autoProcessSnaps,
     'structuredOutputMode': structuredOutputMode.name,
     'debugMode': debugMode,
   };
@@ -211,6 +219,7 @@ class Settings {
       themeMode: themeModeFromName(_string(json['themeMode'])),
       autoProcessShared:
           _bool(json['autoProcessShared']) ?? d.autoProcessShared,
+      autoProcessSnaps: _bool(json['autoProcessSnaps']) ?? d.autoProcessSnaps,
       structuredOutputMode: structuredOutputModeFromName(
         _string(json['structuredOutputMode']),
       ),
@@ -251,6 +260,7 @@ class Settings {
         other.timeoutSeconds == timeoutSeconds &&
         other.themeMode == themeMode &&
         other.autoProcessShared == autoProcessShared &&
+        other.autoProcessSnaps == autoProcessSnaps &&
         other.structuredOutputMode == structuredOutputMode &&
         other.debugMode == debugMode;
   }
@@ -266,6 +276,7 @@ class Settings {
     timeoutSeconds,
     themeMode,
     autoProcessShared,
+    autoProcessSnaps,
     structuredOutputMode,
     debugMode,
   );
@@ -277,6 +288,7 @@ class Settings {
         'opperModel: $opperModel, maxRetries: $maxRetries, '
         'timeoutSeconds: $timeoutSeconds, themeMode: ${themeMode.name}, '
         'autoProcessShared: $autoProcessShared, '
+        'autoProcessSnaps: $autoProcessSnaps, '
         'structuredOutputMode: ${structuredOutputMode.name}, '
         'debugMode: $debugMode, '
         'hasOpenAiKey: ${openAiApiKey.isNotEmpty}, '

@@ -25,8 +25,14 @@ import 'shared_content_source.dart';
 ///   running (`onNewIntent`).
 ///
 /// Payload: `{text: String?, images: [{path: String, mimeType: String}],
-/// failedImages: int?}`;
-/// image files are JPEGs (≤ 2048 px) in the app's cache, kept for 24 hours.
+/// failedImages: int?, source: "snap"?, crop: bool?, snapError: String?}`;
+/// shared image files are JPEGs (≤ 2048 px) in the app's cache, kept for 24
+/// hours. `source: "snap"` marks a screenshot from the "Snap screen" /
+/// "Snap & crop" shortcuts (`SnapTrampolineActivity`): its images are
+/// ephemeral (`cacheDir/snaps/`, deleted by the app), `crop` asks for the crop
+/// screen and `snapError` (serviceDisabled | unsupported | secure | failed)
+/// replaces the image when no screenshot could be taken. Snaps travel through
+/// the same initial / ready / live-push queue as shares.
 ///
 /// On other platforms (web, iOS, desktop) this is a no-op: no initial content
 /// and an empty stream.
@@ -206,13 +212,27 @@ class AndroidSharedContentSource implements SharedContentSource {
     final rawFailed = payload['failedImages'];
     final failed = rawFailed is int && rawFailed > 0 ? rawFailed : 0;
 
+    final isSnap = payload['source'] == 'snap';
+    final rawError = payload['snapError'];
+    final snapError = isSnap && rawError != null
+        ? SnapError.fromCode(rawError)
+        : null;
+
     final content = SharedContent(
       text: text,
-      images: List.unmodifiable(images),
+      images: List.unmodifiable(
+        isSnap ? images.map(_ephemeral).toList() : images,
+      ),
       failedImageCount: failed,
+      isSnap: isSnap,
+      crop: isSnap && payload['crop'] == true,
+      snapError: snapError,
     );
-    return content.isEmpty && failed == 0 ? null : content;
+    return content.isEmpty && failed == 0 && snapError == null ? null : content;
   }
+
+  static InputImage _ephemeral(InputImage image) =>
+      InputImage(path: image.path, mimeType: image.mimeType, isEphemeral: true);
 
   static InputImage? _parseImage(Object? raw) {
     if (raw is! Map) return null;
