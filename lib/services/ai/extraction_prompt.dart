@@ -91,11 +91,30 @@ class ExtractionPrompt {
         'other date without a time -> 09:00-10:00 with confidence "low".',
       )
       ..writeln(
-        '6. Evidence for title, description, location, start and end:\n'
+        '6. Recurring events: set "recurrence" only when the source says the '
+        'event repeats, else null (one-off events). start and end are the '
+        'FIRST occurrence (resolve with the lookup table). frequency '
+        'daily/weekly/monthly/yearly; interval 2 for "biweekly" / "every '
+        'other week", else 1 or null. Examples: "every Monday" -> weekly, '
+        'weekdays ["MO"]; "weekly on Mon and Wed" -> weekly, ["MO","WE"]; '
+        '"daily until Friday" -> daily, until = that date; "first Tuesday of '
+        'every month" -> monthly, weekday_ordinal 1, weekdays ["TU"] (last '
+        'Friday: -1, ["FR"]); "monthly on the 15th" -> monthly, month_day '
+        '15; "every year" -> yearly; "10 weekly sessions starting ..." -> '
+        'weekly, count 10; "until Dec 15" -> until YYYY-MM-DD (use the lookup '
+        'table for relative dates, next occurrence of a date without a '
+        'year). Use count or until, never both; null when no end is stated. '
+        'Do not create separate events for each occurrence.',
+      )
+      ..writeln(
+        '7. Evidence for title, description, location, start, end and '
+        'recurrence:\n'
         '   - quote: the shortest verbatim span (max ~8 words) from the input '
         'that supports the value, copied exactly as written (same language, '
         'spelling and case; for images, the text as printed); null if the '
-        'value was inferred or defaulted, or the field is null.\n'
+        'value was inferred or defaulted, or the field is null (for a '
+        'one-off event: quote null, reasoning "No repeat mentioned.", '
+        'confidence "high").\n'
         '   - reasoning: one short English sentence on how the value was '
         'derived. For a relative date in start or end, name the lookup line '
         "you used, e.g. \"'next Friday' -> Friday ${_nextFriday(local)} = "

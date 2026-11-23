@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="snap_service_label">EventSnap screen snap</string>
+    <string name="snap_accessibility_description">Takes a screenshot only when you trigger an EventSnap \"Snap screen\" shortcut, so EventSnap can find events in it. It never reads what is on your screen at any other time. The screenshot stays private to EventSnap and is deleted after use.</string>
+    <string name="snap_shortcut_snap_short">Snap screen</string>
+    <string name="snap_shortcut_snap_long">Snap screen</string>
+    <string name="snap_shortcut_crop_short">Snap &amp; crop</string>
+    <string name="snap_shortcut_crop_long">Snap screen and crop</string>
+</resources>

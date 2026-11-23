@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 3.0.1
+version: 3.1.0
 
 environment:
   sdk: ^3.14.0
@@ -34,6 +34,8 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^2.0.0
+  # Pure-Dart crop widget (free-form rectangle + handles) for "Snap & crop".
+  crop_image: ^1.0.17
   dynamic_color: ^2.1.0
   # v11 dropped the EncryptedSharedPreferences backend that v2.x wrote the API
   # key with; that data can't be migrated. SecureSettingsService detects it via
@@ -44,6 +46,7 @@ dependencies:
   intl: ^0.20.3
   material_ui: ^1.11.1
   package_info_plus: ^10.2.2
+  path: ^1.9.1
   path_provider: ^2.1.6
   provider: ^6.1.5+1
   shared_preferences: ^2.5.6

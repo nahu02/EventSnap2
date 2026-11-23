@@ -90,6 +90,7 @@ class SecureSettingsService implements SettingsService {
   static const String timeoutSecondsKey = 'timeout_seconds';
   static const String themeModeKey = 'theme_mode';
   static const String autoProcessSharedKey = 'auto_process_shared';
+  static const String autoProcessSnapsKey = 'auto_process_snaps';
   static const String structuredOutputModeKey = 'structured_output_mode';
   static const String debugModeKey = 'debug_mode';
   static const String settingsVersionKey = 'settings_version';
@@ -107,7 +108,11 @@ class SecureSettingsService implements SettingsService {
     timeoutSecondsKey,
     settingsVersionKey,
   };
-  static const Set<String> _boolKeys = {debugModeKey, autoProcessSharedKey};
+  static const Set<String> _boolKeys = {
+    debugModeKey,
+    autoProcessSharedKey,
+    autoProcessSnapsKey,
+  };
   static const List<String> _prefsKeys = [
     providerKey,
     openAiModelKey,
@@ -116,6 +121,7 @@ class SecureSettingsService implements SettingsService {
     timeoutSecondsKey,
     themeModeKey,
     autoProcessSharedKey,
+    autoProcessSnapsKey,
     structuredOutputModeKey,
     debugModeKey,
     settingsVersionKey,
@@ -193,6 +199,7 @@ class SecureSettingsService implements SettingsService {
       await prefs.setInt(timeoutSecondsKey, settings.timeoutSeconds);
       await prefs.setString(themeModeKey, settings.themeMode.name);
       await prefs.setBool(autoProcessSharedKey, settings.autoProcessShared);
+      await prefs.setBool(autoProcessSnapsKey, settings.autoProcessSnaps);
       await prefs.setString(
         structuredOutputModeKey,
         settings.structuredOutputMode.name,
@@ -341,6 +348,8 @@ class SecureSettingsService implements SettingsService {
       themeMode: Settings.themeModeFromName(_getString(prefs, themeModeKey)),
       autoProcessShared:
           _getBool(prefs, autoProcessSharedKey) ?? d.autoProcessShared,
+      autoProcessSnaps:
+          _getBool(prefs, autoProcessSnapsKey) ?? d.autoProcessSnaps,
       structuredOutputMode: Settings.structuredOutputModeFromName(
         _getString(prefs, structuredOutputModeKey),
       ),

@@ -50,6 +50,8 @@ class ReviewEventCard extends StatelessWidget {
     final chips = <Widget>[
       if (event.isAllDay)
         const _Pill(icon: Icons.wb_sunny_outlined, label: 'All day'),
+      if (event.recurrence != null)
+        const _Pill(icon: Icons.repeat, label: 'Repeats'),
       if (edited) const _Pill(icon: Icons.edit_outlined, label: 'Edited'),
       if (checkCount > 0)
         CheckBadge(

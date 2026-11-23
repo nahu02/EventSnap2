@@ -1,5 +1,5 @@
 /// Event fields the AI can provide evidence for.
-enum EventField { title, description, location, start, end }
+enum EventField { title, description, location, start, end, recurrence }
 
 /// How sure the model is about an extracted value.
 enum EvidenceConfidence { high, medium, low }

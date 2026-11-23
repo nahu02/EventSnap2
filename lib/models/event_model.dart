@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:intl/intl.dart';
 
 import 'field_evidence.dart';
+import 'recurrence.dart';
 
 /// Represents a calendar event with all necessary properties.
 ///
@@ -40,6 +41,10 @@ class EventModel {
   /// Per-field AI evidence. Empty for manually created events.
   Map<EventField, FieldEvidence> evidence;
 
+  /// How the event repeats; `null` for a one-off event. [startDateTime] /
+  /// [endDateTime] describe the first occurrence.
+  RecurrenceRule? recurrence;
+
   /// Creates an EventModel.
   ///
   /// Throws [ArgumentError] when [title] is blank or when [endDateTime] is not
@@ -53,6 +58,7 @@ class EventModel {
     required DateTime endDateTime,
     this.isAllDay = false,
     Map<EventField, FieldEvidence> evidence = const {},
+    this.recurrence,
   }) : id = (id == null || id.isEmpty) ? generateId() : id,
        startDateTime = isAllDay
            ? _floorToMidnight(startDateTime.toLocal())
@@ -87,6 +93,17 @@ class EventModel {
         }
       }
     }
+    RecurrenceRule? recurrence;
+    final rawRecurrence = json['recurrence'];
+    if (rawRecurrence is Map) {
+      try {
+        recurrence = RecurrenceRule.fromJson(
+          Map<String, dynamic>.from(rawRecurrence),
+        );
+      } catch (_) {
+        recurrence = null;
+      }
+    }
     return EventModel(
       id: json['id'] as String?,
       title: json['title'] as String,
@@ -96,6 +113,7 @@ class EventModel {
       endDateTime: DateTime.parse(json['endDateTime'] as String),
       isAllDay: json['isAllDay'] as bool? ?? false,
       evidence: evidence,
+      recurrence: recurrence,
     );
   }
 
@@ -109,6 +127,7 @@ class EventModel {
       'startDateTime': startDateTime.toIso8601String(),
       'endDateTime': endDateTime.toIso8601String(),
       'isAllDay': isAllDay,
+      'recurrence': recurrence?.toJson(),
       'evidence': {
         for (final entry in evidence.entries)
           entry.key.name: entry.value.toJson(),
@@ -118,7 +137,7 @@ class EventModel {
 
   /// Creates a copy with optional field updates. The [id] is preserved.
   ///
-  /// [clearDescription] / [clearLocation] reset those fields to null (they
+  /// [clearDescription] / [clearLocation] / [clearRecurrence] reset those fields to null (they
   /// win over a given value).
   EventModel copyWith({
     String? title,
@@ -130,6 +149,8 @@ class EventModel {
     Map<EventField, FieldEvidence>? evidence,
     bool clearDescription = false,
     bool clearLocation = false,
+    RecurrenceRule? recurrence,
+    bool clearRecurrence = false,
   }) {
     return EventModel(
       id: id,
@@ -140,6 +161,7 @@ class EventModel {
       endDateTime: endDateTime ?? this.endDateTime,
       isAllDay: isAllDay ?? this.isAllDay,
       evidence: evidence ?? this.evidence,
+      recurrence: clearRecurrence ? null : recurrence ?? this.recurrence,
     );
   }
 
@@ -165,6 +187,8 @@ class EventModel {
         (!_isMidnight(startDateTime) || !_isMidnight(endDateTime))) {
       errors.add('All-day events must start and end at midnight');
     }
+
+    errors.addAll(recurrence?.validate(start: startDateTime) ?? const []);
 
     return errors;
   }
@@ -251,7 +275,7 @@ class EventModel {
   @override
   String toString() {
     return 'EventModel(id: $id, title: $title, startDateTime: $startDateTime, '
-        'endDateTime: $endDateTime, isAllDay: $isAllDay, location: $location, '
+        'endDateTime: $endDateTime, isAllDay: $isAllDay, recurrence: $recurrence, location: $location, '
         'description: $description, evidence: ${evidence.length} fields)';
   }
 
@@ -266,6 +290,7 @@ class EventModel {
         other.startDateTime == startDateTime &&
         other.endDateTime == endDateTime &&
         other.isAllDay == isAllDay &&
+        other.recurrence == recurrence &&
         _evidenceEquals(other.evidence, evidence);
   }
 
@@ -277,6 +302,7 @@ class EventModel {
     startDateTime,
     endDateTime,
     isAllDay,
+    recurrence,
     Object.hashAllUnordered(
       evidence.entries.map((e) => Object.hash(e.key, e.value)),
     ),

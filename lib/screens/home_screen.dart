@@ -15,6 +15,8 @@ import '../services/ai/ai_exceptions.dart';
 import '../services/ai/ai_service_factory.dart';
 import '../services/platform/image_input_service.dart';
 import '../services/platform/shared_content_source.dart';
+import '../services/platform/snap_file_store.dart';
+import '../services/platform/snap_service.dart';
 import '../ui/error_presentation.dart';
 import '../ui/inline_banner.dart';
 import '../ui/layout.dart';
@@ -23,6 +25,7 @@ import '../widgets/home/example_suggestions.dart';
 import '../widgets/home/home_action_bar.dart';
 import '../widgets/home/model_status_chip.dart';
 import '../widgets/home/setup_card.dart';
+import 'crop_screen.dart';
 
 /// The home screen is the composer (docs/v3_plan.md §6.F): type, paste or
 /// share text and images, tap "Find events", review the result.
@@ -37,6 +40,11 @@ import '../widgets/home/setup_card.dart';
 ///   `Settings.autoProcessShared` and the app is configured, is processed
 ///   right away — but only once settings have loaded and the home screen is
 ///   visible again.
+/// - Screen snaps (`SharedContent.isSnap`, docs/v3_plan.md §9) put an
+///   ephemeral screenshot into the composer; it is processed right away only
+///   with `Settings.autoProcessSnaps`. "Snap & crop" first shows the crop
+///   screen and then always starts extraction. Ephemeral images are deleted
+///   when they are no longer needed (see [SnapFileStore]).
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -46,6 +54,9 @@ class HomeScreen extends StatefulWidget {
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
+
+/// What to do once a snap/share may be processed (see `_maybeAutoProcess`).
+enum _AutoRun { none, shared, snap, always }
 
 typedef _ComposerSnapshot = ({String text, List<InputImage> images});
 
@@ -73,7 +84,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Set when content was shared in; consumed by [_maybeAutoProcess] once
   /// settings are loaded and this screen is the current route.
-  bool _autoProcessPending = false;
+  _AutoRun _autoRun = _AutoRun.none;
+
+  /// Why the last snap shortcut produced no screenshot (shown as a banner).
+  SnapError? _snapProblem;
+  bool _cropping = false;
+
+  /// Input of the review screen that is open; its ephemeral images must
+  /// survive until it closes (as must those of [_pendingReview]).
+  ExtractionInput? _openReviewInput;
+
+  SnapFileStore get _store => context.read<SnapFileStore>();
 
   (AiProvider, String, String)? _visionCheckKey;
   bool _modelLacksVision = false;
@@ -149,8 +170,12 @@ class _HomeScreenState extends State<HomeScreen> {
   // Sharing
 
   Future<void> _takeInitialSharedContent(SharedContentSource source) async {
+    final store = _store;
     try {
       final content = await source.takeInitialSharedContent();
+      // App start: drop snaps of earlier sessions, but not the one that
+      // launched the app.
+      unawaited(store.deleteLeftovers(keep: content?.images ?? const []));
       if (content != null) _onSharedContent(content);
     } catch (e) {
       debugPrint('HomeScreen: could not read shared content: $e');
@@ -159,6 +184,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onSharedContent(SharedContent content) {
     if (!mounted) return;
+    if (content.isSnap) {
+      unawaited(_onSnap(content));
+      return;
+    }
     final failed = content.failedImageCount;
     final failedMessage = failed > 0
         ? "Couldn't read $failed shared ${failed == 1 ? 'image' : 'images'}"
@@ -182,21 +211,94 @@ class _HomeScreenState extends State<HomeScreen> {
       floating: failedMessage != null,
       onUndo: hadContent ? () => _restoreSnapshot(previous) : null,
     );
-    _autoProcessPending = true;
+    _autoRun = _AutoRun.shared;
     _maybeAutoProcess();
   }
 
-  /// Starts extraction for shared content when allowed. Waits (keeps the
-  /// request pending) while settings are loading or another route is on top.
+  /// A screenshot from a "Snap screen" / "Snap & crop" shortcut, or the
+  /// reason there is none.
+  Future<void> _onSnap(SharedContent content) async {
+    final error = content.snapError;
+    if (error != null) {
+      setState(() => _snapProblem = error);
+      _scrollToTop();
+      return;
+    }
+    final image = content.images.firstOrNull;
+    if (image == null) return;
+    if (_cropping) {
+      // A second snap while the crop screen is open would only show that
+      // screen: drop it.
+      unawaited(_store.delete(content.images));
+      _showSnackBar('Finish cropping first');
+      return;
+    }
+    if (_snapProblem != null) setState(() => _snapProblem = null);
+    if (content.crop) {
+      await _cropSnap(image);
+      return;
+    }
+    _addSnapImage(image);
+    _autoRun = _AutoRun.snap;
+    _maybeAutoProcess();
+  }
+
+  Future<void> _cropSnap(InputImage image) async {
+    _cropping = true;
+    InputImage? cropped;
+    try {
+      cropped = await Navigator.of(context).push<InputImage>(
+        MaterialPageRoute<InputImage>(
+          fullscreenDialog: true,
+          builder: (_) => CropScreen(image: image),
+        ),
+      );
+    } finally {
+      _cropping = false;
+    }
+    // Cancelled (or back): the full screenshot is not needed. After "Use
+    // selection" the crop screen already deleted it.
+    if (cropped == null) await _store.delete([image]);
+    if (cropped == null || !mounted) {
+      if (cropped != null) unawaited(_store.delete([cropped]));
+      return;
+    }
+    _addSnapImage(cropped);
+    // The user confirmed the selection: start right away.
+    _autoRun = _AutoRun.always;
+    _maybeAutoProcess();
+  }
+
+  /// Adds a snap to the composer (text and other images stay); the oldest
+  /// image makes room when the limit is reached.
+  void _addSnapImage(InputImage image) {
+    _cancelProcessing();
+    final images = [..._images, image];
+    while (images.length > HomeScreen.maxImages) {
+      images.removeAt(0);
+    }
+    _setComposer(text: _textController.text, images: images);
+    _showSnackBar('Screenshot added');
+  }
+
+  /// Starts extraction for shared content / snaps when allowed. Waits (keeps
+  /// the request pending) while settings are loading or another route is on
+  /// top.
   void _maybeAutoProcess() {
-    if (!_autoProcessPending || !mounted || !_appState.isInitialized) return;
+    if (_autoRun == _AutoRun.none || !mounted || !_appState.isInitialized) {
+      return;
+    }
     if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
-    _autoProcessPending = false;
+    final run = _autoRun;
+    _autoRun = _AutoRun.none;
     final settings = _appState.settings;
-    if (settings.autoProcessShared &&
-        settings.isConfigured &&
-        _hasContent &&
-        !_isProcessing) {
+    final allowed = switch (run) {
+      _AutoRun.shared => settings.autoProcessShared,
+      _AutoRun.snap => settings.autoProcessSnaps,
+      _AutoRun.always => true,
+      _AutoRun.none => false,
+    };
+    if (allowed && settings.isConfigured && _hasContent && !_isProcessing) {
       unawaited(_findEvents());
     }
   }
@@ -245,6 +347,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     if (result.events.isEmpty) {
       _scrollToTop();
+      _discardEphemeral(input.images);
       return;
     }
 
@@ -274,8 +377,17 @@ class _HomeScreenState extends State<HomeScreen> {
     ExtractionInput input,
   ) async {
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    final outcome = await AppRouter.openReview(context, result);
-    if (!mounted) return;
+    _openReviewInput = input;
+    final ReviewOutcome? outcome;
+    try {
+      outcome = await AppRouter.openReview(context, result);
+    } finally {
+      _openReviewInput = null;
+    }
+    if (!mounted) {
+      unawaited(_store.delete(input.images));
+      return;
+    }
     if (outcome == ReviewOutcome.exported) {
       // Keep content that was shared in while the review screen was open.
       if (_composerInput == input) {
@@ -283,17 +395,29 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       _showSnackBar('Sent to your calendar app');
     }
+    // The review is closed: its screenshots are no longer needed (a no-op
+    // for those the cleared composer already deleted).
+    _discardEphemeral(input.images, notify: false);
     _afterNavigation();
   }
 
   void _finishWithError(AiCancellationToken token, AiException error) {
     if (!mounted || !identical(_activeToken, token)) return;
+    final input = _processingInput;
     setState(() {
       _activeToken = null;
       _processingInput = null;
       if (error.kind != AiErrorKind.cancelled) _error = error;
     });
     if (_error != null) _scrollToTop();
+    if (input != null) _discardEphemeral(input.images);
+  }
+
+  /// The user cancels the running extraction: its screenshots go too.
+  void _cancelByUser() {
+    final images = _processingInput?.images;
+    _cancelProcessing();
+    if (images != null) _discardEphemeral(images);
   }
 
   void _cancelProcessing() {
@@ -356,11 +480,19 @@ class _HomeScreenState extends State<HomeScreen> {
   void _restoreSnapshot(_ComposerSnapshot snapshot) {
     if (!mounted) return;
     _cancelProcessing();
-    _autoProcessPending = false;
-    _setComposer(text: snapshot.text, images: snapshot.images);
+    _autoRun = _AutoRun.none;
+    // Snaps are deleted when they leave the composer: nothing to restore.
+    _setComposer(
+      text: snapshot.text,
+      images: snapshot.images.where((i) => !i.isEphemeral).toList(),
+    );
   }
 
   void _setComposer({required String text, required List<InputImage> images}) {
+    // Screenshots that leave the composer are deleted (unless a review that
+    // is still open needs them: it deletes them when it closes).
+    final removed = _images.where((i) => !images.contains(i)).toList();
+    unawaited(_store.delete(removed.where((i) => !_isProtected(i))));
     _textController.value = TextEditingValue(
       text: text,
       selection: TextSelection.collapsed(offset: text.length),
@@ -449,7 +581,33 @@ class _HomeScreenState extends State<HomeScreen> {
     _checkVisionSupport();
   }
 
+  /// True while a review (open or waiting for Home) still shows [image].
+  bool _isProtected(InputImage image) =>
+      (_openReviewInput?.images.contains(image) ?? false) ||
+      (_pendingReview?.input.images.contains(image) ?? false);
+
+  /// Deletes the ephemeral [images] and takes them out of the composer. Used
+  /// when they are no longer needed (extraction ended without a review, the
+  /// review closed).
+  void _discardEphemeral(Iterable<InputImage> images, {bool notify = true}) {
+    final doomed = images
+        .where((i) => i.isEphemeral && !_isProtected(i))
+        .toList();
+    if (doomed.isEmpty || !mounted) return;
+    unawaited(_store.delete(doomed));
+    setState(() => _images.removeWhere(doomed.contains));
+    if (notify) {
+      _showSnackBar(
+        doomed.length == 1 ? 'Screenshot deleted' : 'Screenshots deleted',
+      );
+    }
+  }
+
   void _removeImage(int index) {
+    final removed = _images[index];
+    if (removed.isEphemeral && !_isProtected(removed)) {
+      unawaited(_store.delete([removed]));
+    }
     setState(() {
       _images.removeAt(index);
       _error = null;
@@ -536,6 +694,52 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ---------------------------------------------------------------------------
+  // Snap problems
+
+  Widget _buildSnapProblemBanner(SnapError error) {
+    final (title, message) = switch (error) {
+      SnapError.serviceDisabled => (
+        'Turn on screen snaps',
+        'Snap screen needs the EventSnap accessibility service. It only '
+            'captures the screen when you trigger a Snap shortcut.',
+      ),
+      SnapError.unsupported => (
+        'Screen snaps need Android 11 or newer',
+        "This Android version can't take screenshots for EventSnap. You can "
+            'still share a screenshot to EventSnap.',
+      ),
+      SnapError.secure => (
+        "Couldn't capture this screen",
+        'Some screens (banking apps, private content) block screenshots.',
+      ),
+      SnapError.failed => (
+        'Screenshot failed',
+        'Please try the shortcut again in a moment.',
+      ),
+    };
+    return InlineBanner(
+      key: const Key('snap_problem_banner'),
+      tone: error == SnapError.failed || error == SnapError.secure
+          ? BannerTone.error
+          : BannerTone.warning,
+      icon: Icons.screenshot_outlined,
+      title: title,
+      message: message,
+      onDismiss: () => setState(() => _snapProblem = null),
+      actions: [
+        if (error == SnapError.serviceDisabled)
+          TextButton(
+            key: const Key('open_accessibility_settings_button'),
+            onPressed: () => unawaited(
+              context.read<SnapService>().openAccessibilitySettings(),
+            ),
+            child: const Text('Open accessibility settings'),
+          ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Build
 
   @override
@@ -592,6 +796,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
+        gap,
+      ],
+      if (_snapProblem != null) ...[
+        _buildSnapProblemBanner(_snapProblem!),
         gap,
       ],
       if (isReady && !appState.isConfigured) ...[
@@ -675,7 +883,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return PopScope(
       canPop: !isProcessing,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _cancelProcessing();
+        if (!didPop) _cancelByUser();
       },
       child: Scaffold(
         appBar: AppBar(
@@ -708,7 +916,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onFindEvents: isConfigured && _hasContent && !isProcessing
               ? _findEvents
               : null,
-          onCancel: _cancelProcessing,
+          onCancel: _cancelByUser,
           stageText: _stageText,
           detailText: isProcessing ? statusLabel : null,
         ),

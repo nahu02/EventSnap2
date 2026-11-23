@@ -28,6 +28,7 @@ EventSnap2 is a Flutter mobile app that turns natural language text, and photos 
 - **Structured Output:** When the selected model supports it, results are requested as strict JSON, with automatic fallbacks for models that don't.
 - **Review & Edit:** Adjust titles, times and locations, mark events as all-day, and delete events with undo. Edited fields are marked "Edited by you".
 - **Android Sharing Integration:** Share text or images from any app directly to EventSnap2.
+- **Recurring Events:** Understands "every Monday", "biweekly", "first Tuesday of every month", "10 weekly sessions" or "until Dec 15", shows a **Repeats** row you can edit (frequency, interval, weekdays, end) and exports an `RRULE`; timed series keep their wall-clock time across daylight-saving changes.
 - **iCalendar (.ics) Export:** Generates RFC 5545-compliant files and opens them with your calendar app.
 - **Secure API Key Storage:** Each provider's API key is stored with `flutter_secure_storage`. Keys are never shown in full.
 - **Robust Error Handling:** Retries with exponential backoff for transient failures, and error messages that tell you what to do next.
@@ -91,6 +92,24 @@ EventSnap2 supports two providers. Pick one in Settings.
 ```
 
 ---
+
+## 📸 Snap screen with a hardware key
+
+EventSnap can screenshot whatever is on screen and look for events in it (Android 11+). Two shortcuts are provided:
+
+- **Snap screen**: the screenshot goes into the composer (and is processed right away only if *Settings › Sharing › Auto-process screen snaps* is on).
+- **Snap & crop**: opens a crop screen first; **Use selection** starts "Find events" on the cropped part immediately.
+
+Screenshots are private to the app (`cacheDir/snaps/`, never the gallery) and are deleted as soon as they are no longer needed: when nothing was found or extraction failed or was cancelled, when the review screen closes, when you remove or replace the image, right after cropping, and on the next app start.
+
+**One-time setup**
+
+1. Open *Settings › Sharing › Screen snaps* and tap **Accessibility settings**, then switch on **EventSnap screen snap** (the service takes a screenshot only when you trigger a Snap shortcut and never reads the screen otherwise). Android may ask you to allow restricted settings for sideloaded apps first (App info › ⋮ › Allow restricted settings).
+2. Trigger a shortcut from either place:
+   - **Launcher**: long-press the EventSnap icon and pick *Snap screen* or *Snap & crop*.
+   - **Hardware key (SnapKey Map)**: install [SnapKey Map](https://heykay-47.github.io/SnapKeyMap/), choose your key (e.g. the OnePlus Key), pick the action *Run a supported app shortcut*, then select **EventSnap 2 › Snap screen** (or **Snap & crop**) from the list. Any app that lists `CREATE_SHORTCUT` targets works the same way.
+
+Protected screens (banking apps, some video apps) cannot be captured; EventSnap then says so. On Android 10 and older the shortcuts show an explanation instead.
 
 ## 📖 Usage
 

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:event_snap_2/models/event_model.dart';
+import 'package:event_snap_2/models/recurrence.dart';
 import 'package:event_snap_2/services/calendar/ical_serializer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -257,6 +258,237 @@ void main() {
 
     test('formatDate uses the local calendar date', () {
       expect(ICalSerializer.formatDate(DateTime(2025, 12, 31)), '20251231');
+    });
+  });
+
+  group('recurring events', () {
+    // Monday 2026-11-23, 10:00-11:00 local.
+    EventModel recurring(RecurrenceRule rule, {bool allDay = false}) =>
+        EventModel(
+          id: 'evt-r',
+          title: 'Yoga',
+          startDateTime: allDay
+              ? DateTime(2026, 11, 23)
+              : DateTime(2026, 11, 23, 10),
+          endDateTime: allDay
+              ? DateTime(2026, 11, 24)
+              : DateTime(2026, 11, 23, 11),
+          isAllDay: allDay,
+          recurrence: rule,
+        );
+
+    List<String> lines(EventModel e) =>
+        contentLines(ICalSerializer.serialize([e], timestamp: stamp));
+
+    String rrule(EventModel e) =>
+        lines(e).firstWhere((l) => l.startsWith('RRULE:')).substring(6);
+
+    test('timed recurring events use floating local time', () {
+      final out = lines(
+        recurring(
+          RecurrenceRule(
+            frequency: RecurrenceFrequency.weekly,
+            byWeekdays: {DateTime.monday, DateTime.wednesday},
+            until: DateTime(2026, 12, 15),
+          ),
+        ),
+      );
+      expect(out, contains('DTSTART:20261123T100000'));
+      expect(out, contains('DTEND:20261123T110000'));
+      expect(out.where((l) => l.startsWith('DTSTART')), hasLength(1));
+      expect(out.join('\n'), isNot(contains('TZID')));
+      expect(
+        out,
+        contains('RRULE:FREQ=WEEKLY;BYDAY=MO,WE;UNTIL=20261215T235959'),
+      );
+      // The RRULE follows DTEND and precedes SUMMARY.
+      expect(
+        out.indexOf('DTEND:20261123T110000') + 1,
+        out.indexOf(out.firstWhere((l) => l.startsWith('RRULE'))),
+      );
+    });
+
+    test('one-off events keep the UTC format and have no RRULE', () {
+      final out = lines(timed());
+      expect(out, contains('DTSTART:20250528T140000Z'));
+      expect(out.any((l) => l.startsWith('RRULE')), isFalse);
+    });
+
+    test('all-day recurring events keep VALUE=DATE and a date UNTIL', () {
+      final out = lines(
+        recurring(
+          RecurrenceRule(
+            frequency: RecurrenceFrequency.daily,
+            until: DateTime(2026, 12, 15),
+          ),
+          allDay: true,
+        ),
+      );
+      expect(out, contains('DTSTART;VALUE=DATE:20261123'));
+      expect(out, contains('DTEND;VALUE=DATE:20261124'));
+      expect(out, contains('RRULE:FREQ=DAILY;UNTIL=20261215'));
+    });
+
+    test('daily with interval and count', () {
+      expect(
+        rrule(
+          recurring(
+            RecurrenceRule(
+              frequency: RecurrenceFrequency.daily,
+              interval: 3,
+              count: 5,
+            ),
+          ),
+        ),
+        'FREQ=DAILY;INTERVAL=3;COUNT=5',
+      );
+    });
+
+    test(
+      'weekly without weekdays uses the start weekday; sorted otherwise',
+      () {
+        expect(
+          rrule(
+            recurring(RecurrenceRule(frequency: RecurrenceFrequency.weekly)),
+          ),
+          'FREQ=WEEKLY;BYDAY=MO',
+        );
+        expect(
+          rrule(
+            recurring(
+              RecurrenceRule(
+                frequency: RecurrenceFrequency.weekly,
+                interval: 2,
+                byWeekdays: {
+                  DateTime.sunday,
+                  DateTime.friday,
+                  DateTime.tuesday,
+                },
+                count: 10,
+              ),
+            ),
+          ),
+          'FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,FR,SU;COUNT=10',
+        );
+      },
+    );
+
+    test('monthly by day number, defaulting to the start day', () {
+      expect(
+        rrule(
+          recurring(
+            RecurrenceRule(
+              frequency: RecurrenceFrequency.monthly,
+              byMonthDay: 15,
+            ),
+          ),
+        ),
+        'FREQ=MONTHLY;BYMONTHDAY=15',
+      );
+      expect(
+        rrule(
+          recurring(RecurrenceRule(frequency: RecurrenceFrequency.monthly)),
+        ),
+        'FREQ=MONTHLY;BYMONTHDAY=23',
+      );
+    });
+
+    test('monthly on the first Tuesday and the last Friday', () {
+      expect(
+        rrule(
+          recurring(
+            RecurrenceRule(
+              frequency: RecurrenceFrequency.monthly,
+              byWeekdays: {DateTime.tuesday},
+              weekdayOrdinal: 1,
+            ),
+          ),
+        ),
+        'FREQ=MONTHLY;BYDAY=1TU',
+      );
+      expect(
+        rrule(
+          recurring(
+            RecurrenceRule(
+              frequency: RecurrenceFrequency.monthly,
+              interval: 2,
+              byWeekdays: {DateTime.friday},
+              weekdayOrdinal: -1,
+              until: DateTime(2027, 6, 30),
+            ),
+          ),
+        ),
+        'FREQ=MONTHLY;INTERVAL=2;BYDAY=-1FR;UNTIL=20270630T235959',
+      );
+    });
+
+    test('yearly', () {
+      expect(
+        rrule(recurring(RecurrenceRule(frequency: RecurrenceFrequency.yearly))),
+        'FREQ=YEARLY',
+      );
+      expect(
+        rrule(
+          recurring(
+            RecurrenceRule(frequency: RecurrenceFrequency.yearly, interval: 2),
+          ),
+        ),
+        'FREQ=YEARLY;INTERVAL=2',
+      );
+    });
+
+    test('a long RRULE line is folded and unfolds losslessly', () {
+      final ics = ICalSerializer.serialize([
+        recurring(
+          RecurrenceRule(
+            frequency: RecurrenceFrequency.weekly,
+            interval: 12,
+            byWeekdays: {1, 2, 3, 4, 5, 6, 7},
+            until: DateTime(2026, 12, 15),
+          ),
+        ),
+      ], timestamp: stamp);
+      const expected =
+          'RRULE:FREQ=WEEKLY;INTERVAL=12;BYDAY=MO,TU,WE,TH,FR,SA,SU;'
+          'UNTIL=20261215T235959';
+      expect(expected.length, greaterThan(75));
+      for (final physical in ics.split('\r\n')) {
+        expect(utf8.encode(physical).length, lessThanOrEqualTo(75));
+      }
+      expect(contentLines(ics), contains(expected));
+    });
+
+    test('an invalid rule is rejected', () {
+      expect(
+        () => ICalSerializer.serialize([
+          recurring(
+            RecurrenceRule(
+              frequency: RecurrenceFrequency.daily,
+              count: 2,
+              until: DateTime(2027),
+            ),
+          ),
+        ], timestamp: stamp),
+        throwsArgumentError,
+      );
+      expect(
+        () => ICalSerializer.serialize([
+          recurring(
+            RecurrenceRule(
+              frequency: RecurrenceFrequency.daily,
+              until: DateTime(2026, 11, 1),
+            ),
+          ),
+        ], timestamp: stamp),
+        throwsArgumentError,
+      );
+    });
+
+    test('formatFloatingDateTime has no zone designator', () {
+      expect(
+        ICalSerializer.formatFloatingDateTime(DateTime(2026, 1, 2, 3, 4, 5)),
+        '20260102T030405',
+      );
     });
   });
 }
