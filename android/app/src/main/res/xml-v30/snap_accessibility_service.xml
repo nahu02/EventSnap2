@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- See xml/snap_accessibility_service.xml. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:description="@string/snap_accessibility_description"
+    android:canRetrieveWindowContent="false"
+    android:canTakeScreenshot="true"
+    android:accessibilityFlags="flagDefault" />

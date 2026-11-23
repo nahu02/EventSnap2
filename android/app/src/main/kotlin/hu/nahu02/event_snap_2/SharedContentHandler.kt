@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import java.io.File
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -26,11 +27,18 @@ import java.util.concurrent.RejectedExecutionException
  * Payload: `{"text": String?, "images": [{"path": String, "mimeType": String}],
  * "failedImages": Int}` (sent even when no image could be read).
  *
+ * Screen snaps (`SnapContract.ACTION_SNAP_RESULT`, sent by
+ * [SnapTrampolineActivity]) use the same channel and queue; their payload adds
+ * `"source": "snap"`, `"crop": Boolean` and, when no screenshot could be taken,
+ * `"snapError": String` (serviceDisabled | unsupported | secure | failed). The
+ * image is already a JPEG in `cacheDir/snaps/`, so no processing happens.
+ *
  * All methods must be called on the main thread; image processing runs on a
  * single background thread (so deliveries keep their order).
  */
 internal class SharedContentHandler(
     private val processor: SharedImageProcessor,
+    private val snapDirectory: File,
 ) : MethodChannel.MethodCallHandler {
     companion object {
         const val CHANNEL = "hu.nahu02.event_snap_2/share"
@@ -85,6 +93,10 @@ internal class SharedContentHandler(
 
     /** The intent that created the activity; served by `getInitialSharedContent`. */
     fun handleInitialIntent(intent: Intent?) {
+        snapPayload(intent)?.let {
+            initialPayload = it
+            return
+        }
         val data = intent?.let(SharedIntentParser::parse) ?: return
         initialProcessing = true
         process(data) { payload ->
@@ -98,8 +110,36 @@ internal class SharedContentHandler(
 
     /** An intent delivered while the activity is running; pushed to Dart. */
     fun handleNewIntent(intent: Intent?) {
+        snapPayload(intent)?.let {
+            deliver(it)
+            return
+        }
         val data = intent?.let(SharedIntentParser::parse) ?: return
         process(data) { payload -> if (payload != null) deliver(payload) }
+    }
+
+    /** Payload for a finished capture, or null if [intent] is not one (or is stale). */
+    private fun snapPayload(intent: Intent?): Map<String, Any?>? {
+        if (intent?.action != SnapContract.ACTION_SNAP_RESULT) return null
+        // Relaunching the task from Recents re-delivers the original intent.
+        if ((intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return null
+        val file = intent.getStringExtra(SnapContract.EXTRA_PATH)?.let(::File)?.takeIf {
+            it.isFile && it.canonicalFile.parentFile == snapDirectory.canonicalFile
+        }
+        val error = intent.getStringExtra(SnapContract.EXTRA_ERROR)
+        if (file == null && error == null) return null
+        return mapOf(
+            "text" to null,
+            "images" to if (file != null) {
+                listOf(mapOf("path" to file.absolutePath, "mimeType" to SnapContract.MIME_TYPE))
+            } else {
+                emptyList()
+            },
+            "failedImages" to 0,
+            "source" to "snap",
+            "crop" to intent.getBooleanExtra(SnapContract.EXTRA_CROP, false),
+            "snapError" to if (file == null) (error ?: SnapContract.ERROR_FAILED) else null,
+        )
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
