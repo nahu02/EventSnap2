@@ -18,6 +18,7 @@ import '../widgets/settings/model_display.dart';
 import '../widgets/settings/model_picker.dart';
 import '../widgets/settings/selected_model_tile.dart';
 import '../widgets/settings/settings_section.dart';
+import '../widgets/settings/snap_status_tile.dart';
 
 /// App settings: provider, API key, model, sharing, appearance, advanced
 /// request options and about.
@@ -561,6 +562,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: (value) =>
               _apply((s) => s.copyWith(autoProcessShared: value)),
         ),
+        const Divider(height: 1),
+        SwitchListTile(
+          secondary: const Icon(Icons.screenshot_outlined),
+          title: const Text('Auto-process screen snaps'),
+          subtitle: Text(
+            'The screenshot is then sent to ${settings.provider.displayName} '
+            'without confirmation',
+          ),
+          value: settings.autoProcessSnaps,
+          onChanged: (value) =>
+              _apply((s) => s.copyWith(autoProcessSnaps: value)),
+        ),
+        const Divider(height: 1),
+        const SnapStatusTile(),
       ],
     );
   }

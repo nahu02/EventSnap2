@@ -12,6 +12,8 @@ import 'services/platform/android_shared_content_source.dart';
 import 'services/platform/image_input_service.dart';
 import 'services/platform/picker_image_input_service.dart';
 import 'services/platform/shared_content_source.dart';
+import 'services/platform/snap_file_store.dart';
+import 'services/platform/snap_service.dart';
 import 'services/settings_service.dart';
 import 'themes/app_theme.dart';
 
@@ -33,6 +35,8 @@ class EventSnapApp extends StatelessWidget {
     this.sharedContentSource,
     this.imageInputService,
     this.calendarCreator,
+    this.snapService,
+    this.snapFileStore,
   });
 
   final SettingsService? settingsService;
@@ -40,6 +44,8 @@ class EventSnapApp extends StatelessWidget {
   final SharedContentSource? sharedContentSource;
   final ImageInputService? imageInputService;
   final CalendarCreator? calendarCreator;
+  final SnapService? snapService;
+  final SnapFileStore? snapFileStore;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +66,12 @@ class EventSnapApp extends StatelessWidget {
         ),
         Provider<CalendarCreator>(
           create: (_) => calendarCreator ?? ICalendarCreator(),
+        ),
+        Provider<SnapService>(
+          create: (_) => snapService ?? AndroidSnapService(),
+        ),
+        Provider<SnapFileStore>(
+          create: (_) => snapFileStore ?? SnapFileStore(),
         ),
         ChangeNotifierProvider<AppStateProvider>(
           create: (context) =>

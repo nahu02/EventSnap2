@@ -384,3 +384,28 @@ Three agents build UI in parallel; these rules keep the app coherent.
 - **Structured output variance across Opper's upstream vendors** → validation errors surface as `invalidResponse`; downgrade ladder + lenient parser.
 - **Image payload size / latency** → downscale on device, cap count and bytes, clear progress UI.
 - **No device/emulator here** → Android verified by build only; UI verified by widget tests and a web build screenshot audit (platform channels unavailable on web — services must degrade gracefully, e.g. `kIsWeb` → no-op share source).
+
+## 9. v3.1 snap screen
+
+Goal: screenshot-to-events with a hardware key, no deep link, nothing in the gallery.
+
+**Native (android/)**
+- `SnapAccessibilityService` (`res/xml[-v30]/snap_accessibility_service.xml`: no event types, no window content, `canTakeScreenshot` from API 30) only exists to call `takeScreenshot`. `SnapCapture` converts `HardwareBuffer → Bitmap → JPEG` into `cacheDir/snaps/` (MediaStore is never used), waits for the ~1 s rate limit (one retry on `INTERVAL_TIME_SHORT`) and reports `secure` for FLAG_SECURE errors and black captures. No library was adopted: a pub.dev search for accessibility screenshot packages found only widget-screenshot / screen-security packages and `flutter_automate` (a heavy automation framework), and the platform API itself is ~100 lines.
+- `SnapScreenShortcutActivity` / `SnapCropShortcutActivity` carry `CREATE_SHORTCUT` filters (what SnapKey Map's picker lists) and return `ShortcutManagerCompat.createShortcutResultIntent(...)` (modern id + legacy `EXTRA_SHORTCUT_INTENT/NAME/ICON_RESOURCE`) pointing at `SnapTrampolineActivity`; `res/xml/shortcuts.xml` provides the same two as static launcher shortcuts.
+- `SnapTrampolineActivity` (exported, translucent, no animation, `excludeFromRecents`, `noHistory`, own empty task affinity) waits 150 ms, captures while the user's screen is still visible, then starts `MainActivity` (`ACTION_SNAP_RESULT`, extras `snap_path` / `snap_error` / `crop`; `SINGLE_TOP|CLEAR_TOP`) and finishes. Without the service (or API < 30) it hands over an error instead.
+- `SnapChannelHandler` (`hu.nahu02.event_snap_2/snap`): `getStatus`, `openAccessibilitySettings`, `cropImage` (BitmapRegionDecoder, ≤ 2048 px JPEG, only inside the snaps folder).
+
+**Share channel**: snaps use the existing `…/share` channel, queue and ready handshake. Payload gains `source: "snap"`, `crop: bool`, `snapError: serviceDisabled|unsupported|secure|failed`; snap images are marked ephemeral on the Dart side.
+
+**Dart**
+- `InputImage.isEphemeral`; `SharedContent.isSnap/crop/snapError`; `Settings.autoProcessSnaps` (default false, key `auto_process_snaps`).
+- `SnapService` (status, open settings, crop), `SnapFileStore` (deletes only ephemeral files inside `<cache>/snaps/`; `deleteLeftovers` spares the launching snap and files < 20 s old).
+- Crop UI: `crop_image` 1.0.17 (pure Dart, only depends on Flutter, free-form rectangle with handles; the crop rectangle is returned as fractions and cut natively, so no `image` package is needed). Evaluated and rejected: `crop_your_image` 2.0.1 (pulls in the pure-Dart `image` codec; slow JPEG encoding of full-resolution screenshots), `image_cropper` 14 (uCrop launches a separate native activity, extra Gradle deps, themes outside `material_ui`). No pinch-zoom (not offered by `crop_image`; screenshots fit the screen).
+- `CropScreen` pops the cropped image (deleting the full screenshot) or null; Home deletes the screenshot on null.
+
+**Flow**: plain snap → image appended to the composer (oldest dropped beyond 4), auto-run only if `autoProcessSnaps`. Snap & crop → crop screen → extraction starts at once. Errors → banner with a button to the accessibility settings (service disabled).
+
+**Deletion policy** (Home + `SnapFileStore`): (a) extraction ends without a review (0 events, error, user cancel) → deleted and removed from the composer; (b) review closes (exported or discarded) → deleted; (c) chip removed, composer cleared or replaced → deleted (images used by an open/pending review are kept until it closes; Undo cannot bring snaps back); (d) full screenshot deleted right after cropping, or on crop cancel; (e) leftovers in `cacheDir/snaps/` deleted on app start.
+
+**Risk**: the trampoline must be exported for launchers/SnapKey Map, so any app can trigger a capture into EventSnap's private cache (and, with auto-process on, a send to the AI provider). Hence auto-process is off by default.
+

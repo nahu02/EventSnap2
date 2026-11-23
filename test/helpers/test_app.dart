@@ -15,12 +15,15 @@ import 'package:event_snap_2/services/ai/ai_service_factory.dart';
 import 'package:event_snap_2/services/calendar/calendar_creator.dart';
 import 'package:event_snap_2/services/platform/image_input_service.dart';
 import 'package:event_snap_2/services/platform/shared_content_source.dart';
+import 'package:event_snap_2/services/platform/snap_file_store.dart';
+import 'package:event_snap_2/services/platform/snap_service.dart';
 import 'package:event_snap_2/services/settings_service.dart';
 import 'package:event_snap_2/themes/app_theme.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import 'fakes.dart';
+import 'snap_fakes.dart';
 
 /// A configured set of fakes plus an [AppStateProvider] over them.
 class TestServices {
@@ -31,11 +34,15 @@ class TestServices {
     FakeSharedContentSource? sharedContentSource,
     FakeImageInputService? imageInputService,
     FakeCalendarCreator? calendarCreator,
+    FakeSnapService? snapService,
+    RecordingSnapFileStore? snapFileStore,
   }) : settingsService = settingsService ?? InMemorySettingsService(settings),
        aiServiceFactory = aiServiceFactory ?? FakeAiServiceFactory(),
        sharedContentSource = sharedContentSource ?? FakeSharedContentSource(),
        imageInputService = imageInputService ?? FakeImageInputService(),
-       calendarCreator = calendarCreator ?? FakeCalendarCreator() {
+       calendarCreator = calendarCreator ?? FakeCalendarCreator(),
+       snapService = snapService ?? FakeSnapService(),
+       snapFileStore = snapFileStore ?? RecordingSnapFileStore() {
     appState = AppStateProvider(settingsService: this.settingsService);
   }
 
@@ -44,6 +51,8 @@ class TestServices {
   final FakeSharedContentSource sharedContentSource;
   final FakeImageInputService imageInputService;
   final FakeCalendarCreator calendarCreator;
+  final FakeSnapService snapService;
+  final RecordingSnapFileStore snapFileStore;
   late final AppStateProvider appState;
 
   /// Shortcut to the shared fake interpreter.
@@ -63,6 +72,8 @@ class TestServices {
     Provider<SharedContentSource>.value(value: sharedContentSource),
     Provider<ImageInputService>.value(value: imageInputService),
     Provider<CalendarCreator>.value(value: calendarCreator),
+    Provider<SnapService>.value(value: snapService),
+    Provider<SnapFileStore>.value(value: snapFileStore),
     ChangeNotifierProvider<AppStateProvider>.value(value: appState),
   ];
 
