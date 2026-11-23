@@ -2,8 +2,10 @@ import 'package:material_ui/material_ui.dart';
 
 import '../models/event_model.dart';
 import '../models/field_evidence.dart';
+import '../models/recurrence.dart';
 import 'review/evidence_line.dart';
 import 'review/event_formatting.dart';
+import 'review/recurrence_editor.dart';
 
 /// Editable form for one event, with the AI's per-field evidence.
 ///
@@ -69,6 +71,7 @@ class EventFormState extends State<EventForm> {
   late DateTime _start;
   late DateTime _end;
   late bool _isAllDay;
+  RecurrenceRule? _recurrence;
 
   /// Timed start/end before switching to all-day (restored when switching
   /// back).
@@ -90,6 +93,7 @@ class EventFormState extends State<EventForm> {
     _start = event.startDateTime;
     _end = event.endDateTime;
     _isAllDay = event.isAllDay;
+    _recurrence = event.recurrence;
     _reportedEdited = editedFields;
 
     _titleController.addListener(_handleChanged);
@@ -127,6 +131,9 @@ class EventFormState extends State<EventForm> {
   /// Whether the event is currently all-day.
   bool get isAllDay => _isAllDay;
 
+  /// How the event repeats as currently entered (`null` = one-off).
+  RecurrenceRule? get recurrence => _recurrence;
+
   /// Fields whose value differs from the AI suggestion ([originalEvent]).
   Set<EventField> get editedFields {
     final o = _original;
@@ -140,13 +147,16 @@ class EventFormState extends State<EventForm> {
         EventField.location,
       if (allDayChanged || _start != o.startDateTime) EventField.start,
       if (allDayChanged || _end != o.endDateTime) EventField.end,
+      if (_recurrence != o.recurrence) EventField.recurrence,
     };
   }
 
   /// Validates the form, showing errors inline. Returns true when valid.
   bool validateForm() {
     final fieldsValid = _formKey.currentState?.validate() ?? false;
-    return fieldsValid && _end.isAfter(_start);
+    return fieldsValid &&
+        _end.isAfter(_start) &&
+        (_recurrence?.isValid ?? true);
   }
 
   /// The event as currently entered. Throws [ArgumentError] when the form is
@@ -162,13 +172,21 @@ class EventFormState extends State<EventForm> {
       location: _blankToNull(_locationController.text),
       startDateTime: _start,
       endDateTime: _end,
+      recurrence: _recurrence,
     );
+  }
+
+  /// Sets how the event repeats (`null` = does not repeat).
+  void setRecurrence(RecurrenceRule? rule) {
+    setState(() => _recurrence = rule);
+    _handleChanged();
   }
 
   /// Moves the start to [newStart] and the end by the same amount, keeping
   /// the duration. For all-day events only the date of [newStart] is used.
   void setStart(DateTime newStart) {
     setState(() {
+      _recurrence = _recurrenceForNewStart(_recurrence, _start, newStart);
       if (_isAllDay) {
         final day = DateTime(newStart.year, newStart.month, newStart.day);
         final shiftDays = _daysBetween(_start, day);
@@ -181,6 +199,47 @@ class EventFormState extends State<EventForm> {
       }
     });
     _handleChanged();
+  }
+
+  /// Keeps a repeat rule consistent with a moved start: a weekly rule that
+  /// only repeats on the old weekday moves to the new weekday, a monthly rule
+  /// on the old day number / "nth weekday" follows the new date, and an end
+  /// date before the new start is moved to it.
+  static RecurrenceRule? _recurrenceForNewStart(
+    RecurrenceRule? rule,
+    DateTime oldStart,
+    DateTime newStart,
+  ) {
+    if (rule == null) return null;
+    var result = rule;
+    switch (rule.frequency) {
+      case RecurrenceFrequency.weekly:
+        if (rule.byWeekdays.length == 1 &&
+            rule.byWeekdays.first == oldStart.weekday) {
+          result = result.copyWith(byWeekdays: {newStart.weekday});
+        }
+      case RecurrenceFrequency.monthly:
+        if (rule.isNthWeekday) {
+          if (rule.byWeekdays.length == 1 &&
+              rule.byWeekdays.first == oldStart.weekday &&
+              rule.weekdayOrdinal == weekdayOrdinalOf(oldStart)) {
+            result = result.copyWith(
+              byWeekdays: {newStart.weekday},
+              weekdayOrdinal: weekdayOrdinalOf(newStart),
+            );
+          }
+        } else if (rule.byMonthDay == oldStart.day) {
+          result = result.copyWith(byMonthDay: newStart.day);
+        }
+      case RecurrenceFrequency.daily || RecurrenceFrequency.yearly:
+        break;
+    }
+    final until = result.until;
+    final newDay = DateTime(newStart.year, newStart.month, newStart.day);
+    if (until != null && until.isBefore(newDay)) {
+      result = result.copyWith(until: newDay);
+    }
+    return result;
   }
 
   /// Sets the end (exclusive midnight for all-day events). The start is not
@@ -268,6 +327,7 @@ class EventFormState extends State<EventForm> {
     final onChanged = widget.onChanged;
     if (onChanged == null) return;
     if (_titleController.text.trim().isEmpty || !_end.isAfter(_start)) return;
+    if (!(_recurrence?.isValid ?? true)) return;
     try {
       onChanged(getCurrentEventModel());
     } on ArgumentError {
@@ -337,6 +397,17 @@ class EventFormState extends State<EventForm> {
     }
   }
 
+  Future<void> _editRecurrence() async {
+    widget.onFieldFocused?.call(EventField.recurrence);
+    final result = await showRecurrenceEditor(
+      context,
+      rule: _recurrence,
+      start: _start,
+    );
+    if (result == null || !mounted) return;
+    setRecurrence(result.rule);
+  }
+
   // ---------------------------------------------------------------------------
   // Build
 
@@ -369,6 +440,19 @@ class EventFormState extends State<EventForm> {
           ..._evidence(EventField.title, edited, fmt),
           const SizedBox(height: 16),
           _buildWhen(context, fmt, edited),
+          const SizedBox(height: 8),
+          ListTile(
+            key: const ValueKey('event_repeats_row'),
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.repeat),
+            title: Text(
+              fmt.recurrence(_recurrence, _start),
+              key: const ValueKey('event_repeats_summary'),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _editRecurrence,
+          ),
+          ..._evidence(EventField.recurrence, edited, fmt),
           const SizedBox(height: 16),
           TextFormField(
             key: const ValueKey('event_location_field'),
@@ -500,7 +584,7 @@ class EventFormState extends State<EventForm> {
       EventField.title => _titleController.text.trim().isNotEmpty,
       EventField.description => _descriptionController.text.trim().isNotEmpty,
       EventField.location => _locationController.text.trim().isNotEmpty,
-      EventField.start || EventField.end => true,
+      EventField.start || EventField.end || EventField.recurrence => true,
     };
     if (!hasValue && !isEdited) return const [];
 
@@ -511,6 +595,7 @@ class EventFormState extends State<EventForm> {
       EventField.location => _blankToNull(o.location) ?? 'none',
       EventField.start => fmt.startValue(o),
       EventField.end => fmt.endValue(o),
+      EventField.recurrence => fmt.recurrence(o.recurrence, o.startDateTime),
     };
     final onShowInSource = widget.onShowInSource;
     return [

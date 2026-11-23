@@ -68,6 +68,8 @@ Map<String, dynamic> wireEvent({
   String start = '2026-11-27T19:00:00+00:00',
   String end = '2026-11-27T20:00:00+00:00',
   bool allDay = false,
+  Object? recurrence,
+  Map<String, dynamic>? recurrenceEvidence,
 }) => {
   'evidence': {
     'title': wireEvidence('Dinner with Anna'),
@@ -82,6 +84,13 @@ Map<String, dynamic> wireEvent({
       reasoning: 'No end given; 1 hour.',
       confidence: 'low',
     ),
+    'recurrence':
+        recurrenceEvidence ??
+        wireEvidence(
+          null,
+          reasoning: 'No repeat mentioned.',
+          confidence: 'high',
+        ),
   },
   'title': title,
   'description': description,
@@ -89,6 +98,7 @@ Map<String, dynamic> wireEvent({
   'start': start,
   'end': end,
   'all_day': allDay,
+  'recurrence': recurrence,
 };
 
 /// `{"events": [...]}` as a JSON string.

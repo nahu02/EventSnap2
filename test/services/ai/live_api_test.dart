@@ -14,6 +14,7 @@ import 'package:event_snap_2/models/ai_provider.dart';
 import 'package:event_snap_2/models/event_model.dart';
 import 'package:event_snap_2/models/extraction.dart';
 import 'package:event_snap_2/models/field_evidence.dart';
+import 'package:event_snap_2/models/recurrence.dart';
 import 'package:event_snap_2/models/settings.dart';
 import 'package:event_snap_2/services/ai/ai_exceptions.dart';
 import 'package:event_snap_2/services/ai/default_ai_service_factory.dart';
@@ -199,6 +200,36 @@ void main() {
       final party = result.events.firstWhere((e) => e.isAllDay);
       expect(party.startDateTime, DateTime(partyYear, 12, 3));
       expect(party.endDateTime, DateTime(partyYear, 12, 4));
+    });
+
+    test('text: reads weekly and monthly recurrence', () async {
+      final result = await factory
+          .createInterpreter(settings)
+          .extractEvents(
+            const ExtractionInput(
+              text:
+                  'Yoga every Tuesday and Thursday at 7pm until Christmas. '
+                  'Book club on the first Wednesday of every month at 18:30.',
+            ),
+          );
+      for (final e in result.events) {
+        _log('recurrence event: ${_describe(e)} | ${e.recurrence}');
+      }
+      expect(result.events, hasLength(2));
+      final yoga = result.events.firstWhere(
+        (e) => e.title.toLowerCase().contains('yoga'),
+      );
+      expect(yoga.recurrence?.frequency, RecurrenceFrequency.weekly);
+      expect(yoga.recurrence?.byWeekdays, {
+        DateTime.tuesday,
+        DateTime.thursday,
+      });
+      expect(yoga.recurrence?.until?.month, 12);
+      expect(yoga.recurrence?.until?.day, 25);
+      final club = result.events.firstWhere((e) => e != yoga);
+      expect(club.recurrence?.frequency, RecurrenceFrequency.monthly);
+      expect(club.recurrence?.weekdayOrdinal, 1);
+      expect(club.recurrence?.byWeekdays, {DateTime.wednesday});
     });
 
     test('image: reads the event from a flyer', () async {

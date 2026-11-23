@@ -2,6 +2,7 @@ import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../models/event_model.dart';
+import '../../models/recurrence.dart';
 
 /// Locale- and 24-hour-aware date/time formatting for the review UI.
 ///
@@ -102,6 +103,71 @@ class EventFormatter {
 
   String endValue(EventModel e) =>
       e.isAllDay ? date(e.lastDay) : dateTime(e.endDateTime);
+
+  /// Short weekday name for an ISO [weekday] (1 = Monday), e.g. `Mon`.
+  String weekdayShort(int weekday) =>
+      DateFormat.E(locale).format(_isoWeekday(weekday));
+
+  /// Full weekday name for an ISO [weekday], e.g. `Tuesday`.
+  String weekdayLong(int weekday) =>
+      DateFormat.EEEE(locale).format(_isoWeekday(weekday));
+
+  /// e.g. `Dec 15, 2026`.
+  String shortDate(DateTime d) => DateFormat.yMMMd(locale).format(d);
+
+  static DateTime _isoWeekday(int weekday) =>
+      DateTime(2024, 1, weekday); // 2024-01-01 is a Monday.
+
+  /// English ordinal word for a monthly "nth weekday" rule.
+  static String ordinalWord(int ordinal) => switch (ordinal) {
+    1 => 'first',
+    2 => 'second',
+    3 => 'third',
+    4 => 'fourth',
+    -1 => 'last',
+    _ => '$ordinal.',
+  };
+
+  /// One-line summary of how an event starting at [start] repeats, e.g.
+  /// `Does not repeat`, `Every week on Mon, Wed · until Dec 15, 2026`,
+  /// `Every 2 weeks on Fri · 10 times`, `Monthly on the first Tuesday`,
+  /// `Every year`.
+  String recurrence(RecurrenceRule? rule, DateTime start) {
+    if (rule == null) return 'Does not repeat';
+    final n = rule.interval;
+    final String base;
+    switch (rule.frequency) {
+      case RecurrenceFrequency.daily:
+        base = n == 1 ? 'Every day' : 'Every $n days';
+      case RecurrenceFrequency.weekly:
+        final days = (rule.byWeekdays.isEmpty
+            ? [start.weekday]
+            : (rule.byWeekdays.toList()..sort()));
+        base =
+            '${n == 1 ? 'Every week' : 'Every $n weeks'} on '
+            '${days.map(weekdayShort).join(', ')}';
+      case RecurrenceFrequency.monthly:
+        final ordinal = rule.weekdayOrdinal;
+        final String when;
+        if (ordinal != null && rule.byWeekdays.isNotEmpty) {
+          when =
+              'the ${ordinalWord(ordinal)} '
+              '${weekdayLong(rule.byWeekdays.first)}';
+        } else {
+          when = 'day ${rule.byMonthDay ?? start.day}';
+        }
+        base = '${n == 1 ? 'Monthly' : 'Every $n months'} on $when';
+      case RecurrenceFrequency.yearly:
+        base = n == 1 ? 'Every year' : 'Every $n years';
+    }
+    final until = rule.until;
+    final count = rule.count;
+    if (until != null) return '$base · until ${shortDate(until)}';
+    if (count != null) {
+      return '$base · ${count == 1 ? '1 time' : '$count times'}';
+    }
+    return base;
+  }
 
   static DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
 

@@ -1,4 +1,5 @@
 import '../../models/event_model.dart';
+import '../../models/recurrence.dart';
 
 /// Minimal RFC 5545 (iCalendar) writer for [EventModel]s.
 ///
@@ -7,6 +8,11 @@ import '../../models/event_model.dart';
 /// - One `VEVENT` per event with `UID`, `DTSTAMP`, `DTSTART`/`DTEND` (UTC
 ///   `…Z` date-times, or `;VALUE=DATE` for all-day events), `SUMMARY` and
 ///   optional `DESCRIPTION` / `LOCATION`.
+/// - Recurring events get an `RRULE`. Timed recurring events use **floating**
+///   local date-times (`DTSTART:20261123T100000`, no `Z`, no `TZID`) so the
+///   wall-clock time stays fixed across daylight-saving changes; their `UNTIL`
+///   is floating too (`…T235959`). All-day recurring events keep `VALUE=DATE`
+///   and a date `UNTIL`. One-off events keep the UTC format.
 /// - TEXT values are escaped (`\\`, `\;`, `\,`, `\n`), lines end with CRLF and
 ///   are folded at 75 octets without splitting UTF-8 sequences.
 class ICalSerializer {
@@ -55,10 +61,20 @@ class ICalSerializer {
         lines
           ..add('DTSTART;VALUE=DATE:${formatDate(event.startDateTime)}')
           ..add('DTEND;VALUE=DATE:${formatDate(event.endDateTime)}');
+      } else if (event.recurrence != null) {
+        lines
+          ..add('DTSTART:${formatFloatingDateTime(event.startDateTime)}')
+          ..add('DTEND:${formatFloatingDateTime(event.endDateTime)}');
       } else {
         lines
           ..add('DTSTART:${formatUtcDateTime(event.startDateTime)}')
           ..add('DTEND:${formatUtcDateTime(event.endDateTime)}');
+      }
+      final recurrence = event.recurrence;
+      if (recurrence != null) {
+        lines.add(
+          'RRULE:${buildRule(recurrence, start: event.startDateTime, allDay: event.isAllDay)}',
+        );
       }
       lines.add('SUMMARY:${escapeText(event.title.trim())}');
       final description = event.description?.trim();
@@ -124,6 +140,64 @@ class ICalSerializer {
     }
     return buffer.toString();
   }
+
+  /// The value of an `RRULE` property (without the `RRULE:` prefix).
+  ///
+  /// Parts: `FREQ`, `INTERVAL` (when > 1), `BYDAY` (weekly days, or an
+  /// ordinal like `1TU` / `-1FR`), `BYMONTHDAY` (monthly; defaults to the
+  /// start's day), then `COUNT` or `UNTIL` (a date for all-day events,
+  /// otherwise a floating `…T235959`).
+  static String buildRule(
+    RecurrenceRule rule, {
+    required DateTime start,
+    required bool allDay,
+  }) {
+    final parts = <String>['FREQ=${rule.frequency.name.toUpperCase()}'];
+    if (rule.interval > 1) parts.add('INTERVAL=${rule.interval}');
+    switch (rule.frequency) {
+      case RecurrenceFrequency.weekly:
+        final days = rule.byWeekdays.isEmpty
+            ? [start.weekday]
+            : (rule.byWeekdays.toList()..sort());
+        parts.add('BYDAY=${days.map((d) => weekdayCodes[d - 1]).join(',')}');
+      case RecurrenceFrequency.monthly:
+        final ordinal = rule.weekdayOrdinal;
+        if (ordinal != null && rule.byWeekdays.isNotEmpty) {
+          final day = rule.byWeekdays.first;
+          parts.add('BYDAY=$ordinal${weekdayCodes[day - 1]}');
+        } else {
+          parts.add('BYMONTHDAY=${rule.byMonthDay ?? start.day}');
+        }
+      case RecurrenceFrequency.daily || RecurrenceFrequency.yearly:
+        break;
+    }
+    final count = rule.count;
+    final until = rule.until;
+    if (count != null) {
+      parts.add('COUNT=$count');
+    } else if (until != null) {
+      parts.add(
+        'UNTIL=${allDay ? formatDate(until) : '${formatDate(until)}T235959'}',
+      );
+    }
+    return parts.join(';');
+  }
+
+  /// RFC 5545 weekday codes, Monday (index 0) to Sunday.
+  static const List<String> weekdayCodes = [
+    'MO',
+    'TU',
+    'WE',
+    'TH',
+    'FR',
+    'SA',
+    'SU',
+  ];
+
+  /// `yyyyMMddTHHmmss`: the local wall-clock time as a floating date-time.
+  static String formatFloatingDateTime(DateTime dateTime) =>
+      '${formatDate(dateTime)}'
+      'T${_pad(dateTime.hour)}${_pad(dateTime.minute)}${_pad(dateTime.second)}';
 
   /// `yyyyMMddTHHmmssZ` in UTC.
   static String formatUtcDateTime(DateTime dateTime) {

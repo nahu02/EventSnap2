@@ -99,8 +99,11 @@ void main() {
       expect(find.text('4:30${_sp}PM'), findsOneWidget);
       expect(find.text('2 h 30 min'), findsOneWidget);
       for (final field in EventField.values) {
+        if (field == EventField.recurrence) continue;
         expect(evidence(field), findsOneWidget, reason: field.name);
       }
+      expect(find.text('Does not repeat'), findsOneWidget);
+      expect(evidence(EventField.recurrence), findsNothing);
       // Only the low-confidence description asks for a check.
       expect(
         find.descendant(
