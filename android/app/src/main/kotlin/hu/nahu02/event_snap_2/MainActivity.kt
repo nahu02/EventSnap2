@@ -21,13 +21,18 @@ class MainActivity : FlutterActivity() {
     }
 
     // Created lazily: configureFlutterEngine runs inside super.onCreate.
-    private val sharedContent by lazy { SharedContentHandler(SharedImageProcessor(applicationContext)) }
+    private val sharedContent by lazy {
+        SharedContentHandler(SharedImageProcessor(applicationContext), SnapContract.directory(applicationContext))
+    }
+    private val snapChannel by lazy { SnapChannelHandler(applicationContext) }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
         // Share sheet / "Open with" content → Flutter (see SharedContentHandler).
         sharedContent.attach(flutterEngine.dartExecutor.binaryMessenger)
+        // Screen snap helpers (status, accessibility settings, crop).
+        snapChannel.attach(flutterEngine.dartExecutor.binaryMessenger)
 
         // Set up method channel for calendar integration
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CALENDAR_CHANNEL).setMethodCallHandler { call, result ->
@@ -62,6 +67,7 @@ class MainActivity : FlutterActivity() {
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         sharedContent.detach()
+        snapChannel.detach()
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
@@ -81,6 +87,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         sharedContent.release()
+        snapChannel.release()
         super.onDestroy()
     }
 

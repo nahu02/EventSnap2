@@ -16,6 +16,10 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
+            <!-- Static launcher shortcuts: "Snap screen" and "Snap & crop" -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
             <!-- Specifies an Android theme to apply to this Activity as soon as
                  the Android process has started. This theme is visible to the user
                  while the Flutter UI initializes. After that, this theme continues
@@ -57,6 +61,60 @@
             </intent-filter>
         </activity>
         
+        <!-- Screen snaps (docs/v3_plan.md §9). The shortcut activities show up
+             in apps that list ACTION_CREATE_SHORTCUT targets (e.g. SnapKey Map)
+             and return a shortcut to the trampoline. -->
+        <activity
+            android:name=".SnapScreenShortcutActivity"
+            android:exported="true"
+            android:label="@string/snap_shortcut_snap_short"
+            android:icon="@drawable/ic_snap_screen"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:excludeFromRecents="true"
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.intent.action.CREATE_SHORTCUT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".SnapCropShortcutActivity"
+            android:exported="true"
+            android:label="@string/snap_shortcut_crop_short"
+            android:icon="@drawable/ic_snap_crop"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:excludeFromRecents="true"
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.intent.action.CREATE_SHORTCUT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Invisible: takes the screenshot, then opens MainActivity with it. -->
+        <activity
+            android:name=".SnapTrampolineActivity"
+            android:exported="true"
+            android:theme="@style/SnapTrampolineTheme"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <!-- Only used to call takeScreenshot (API 30+) when a Snap shortcut runs. -->
+        <service
+            android:name=".SnapAccessibilityService"
+            android:exported="true"
+            android:label="@string/snap_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/snap_accessibility_service" />
+        </service>
+
         <!-- File provider for sharing .ics files -->
         <provider
             android:name="androidx.core.content.FileProvider"

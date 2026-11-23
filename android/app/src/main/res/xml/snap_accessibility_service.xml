@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Used only to take a screenshot when the user triggers a Snap shortcut. No
+     event types, no window content, no gestures: the service never reads the
+     screen otherwise. API 30+ adds android:canTakeScreenshot (xml-v30). -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:description="@string/snap_accessibility_description"
+    android:canRetrieveWindowContent="false"
+    android:accessibilityFlags="flagDefault" />

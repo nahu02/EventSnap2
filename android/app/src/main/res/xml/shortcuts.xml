@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Static launcher shortcuts (long-press the app icon). Same targets as the
+     CREATE_SHORTCUT entries: the translucent SnapTrampolineActivity. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="snap_screen"
+        android:enabled="true"
+        android:icon="@drawable/ic_snap_screen"
+        android:shortcutShortLabel="@string/snap_shortcut_snap_short"
+        android:shortcutLongLabel="@string/snap_shortcut_snap_long">
+        <intent
+            android:action="hu.nahu02.event_snap_2.action.SNAP"
+            android:targetPackage="hu.nahu02.event_snap_2"
+            android:targetClass="hu.nahu02.event_snap_2.SnapTrampolineActivity">
+            <extra android:name="crop" android:value="false" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="snap_crop"
+        android:enabled="true"
+        android:icon="@drawable/ic_snap_crop"
+        android:shortcutShortLabel="@string/snap_shortcut_crop_short"
+        android:shortcutLongLabel="@string/snap_shortcut_crop_long">
+        <intent
+            android:action="hu.nahu02.event_snap_2.action.SNAP"
+            android:targetPackage="hu.nahu02.event_snap_2"
+            android:targetClass="hu.nahu02.event_snap_2.SnapTrampolineActivity">
+            <extra android:name="crop" android:value="true" />
+        </intent>
+    </shortcut>
+</shortcuts>
