@@ -28,6 +28,7 @@ EventSnap2 is a Flutter mobile app that turns natural language text, and photos 
 - **Structured Output:** When the selected model supports it, results are requested as strict JSON, with automatic fallbacks for models that don't.
 - **Review & Edit:** Adjust titles, times and locations, mark events as all-day, and delete events with undo. Edited fields are marked "Edited by you".
 - **Android Sharing Integration:** Share text or images from any app directly to EventSnap2.
+- **Recurring Events:** Understands "every Monday", "biweekly", "first Tuesday of every month", "10 weekly sessions" or "until Dec 15", shows a **Repeats** row you can edit (frequency, interval, weekdays, end) and exports an `RRULE`; timed series keep their wall-clock time across daylight-saving changes.
 - **iCalendar (.ics) Export:** Generates RFC 5545-compliant files and opens them with your calendar app.
 - **Secure API Key Storage:** Each provider's API key is stored with `flutter_secure_storage`. Keys are never shown in full.
 - **Robust Error Handling:** Retries with exponential backoff for transient failures, and error messages that tell you what to do next.
